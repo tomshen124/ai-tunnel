@@ -5,16 +5,18 @@
 # 服务配置
 # ═══════════════════════════════════════
 server:
-  port: 9000                      # 统一入口端口（应用连这里）
+  # 统一入口端口（VPS 上的应用连这里）
+  port: 9000
   host: "127.0.0.1"
 
+  # Web UI
   ui:
     enabled: true
-    port: 3000                    # Web UI 端口
+    port: 3000
     host: "127.0.0.1"
 
 # ═══════════════════════════════════════
-# SSH 连接（可选，不用隧道可删除整个 ssh 段）
+# SSH 连接（可选，不用隧道时删除此段）
 # ═══════════════════════════════════════
 ssh:
   host: "YOUR_VPS_IP"
@@ -33,47 +35,47 @@ channels:
     keys:
       - "sk-your-key-1"
       - "sk-your-key-2"
-    keyStrategy: "round-robin"    # round-robin | random
-    weight: 10                    # 权重，越高越优先
+    keyStrategy: "round-robin"     # round-robin | random
+    weight: 10                     # 权重越高优先级越高
     tunnel:
       enabled: true
-      localPort: 8080             # 本地反代端口
-      remotePort: 9090            # VPS 映射端口
+      localPort: 8080
+      remotePort: 9090
     healthCheck:
       path: "/v1/models"
       intervalMs: 60000
       timeoutMs: 5000
 
-  # 备用通道示例
-  # - name: "backup-api"
-  #   target: "https://backup-api.com"
-  #   keys:
-  #     - "sk-backup-key"
-  #   weight: 5
-  #   fallback: true              # 标记为备用
-  #   tunnel:
-  #     enabled: true
-  #     localPort: 8081
-  #     remotePort: 9091
+  - name: "backup-api"
+    target: "https://another-api.com"
+    keys:
+      - "sk-backup-key"
+    weight: 5
+    fallback: true                 # 备用通道
+    tunnel:
+      enabled: true
+      localPort: 8081
+      remotePort: 9091
 
 # ═══════════════════════════════════════
-# 路由规则（可选，默认所有请求走全部通道）
+# 路由组（可选，默认全部 channel 走 priority）
 # ═══════════════════════════════════════
-# routes:
-#   - path: "/v1/**"
-#     channels: ["hotaru", "backup-api"]
-#     strategy: "priority"        # priority | round-robin | lowest-latency
+routes:
+  - path: "/v1/**"
+    channels: ["hotaru", "backup-api"]
+    strategy: "priority"           # priority | round-robin | lowest-latency
 
 # ═══════════════════════════════════════
 # 全局设置
 # ═══════════════════════════════════════
 settings:
-  reconnectInterval: 5000         # SSH 断线重连间隔（ms）
-  logLevel: "info"                # debug | info | warn | error
-  hotReload: true                 # 配置文件变化自动重载
+  reconnectInterval: 5000
+  logLevel: "info"                 # debug | info | warn | error
+  hotReload: true                  # 配置变更自动重载
+
   retry:
     maxRetries: 3
     retryOn: [429, 502, 503, 504]
-    backoff: "exponential"        # exponential | fixed
+    backoff: "exponential"         # exponential | fixed
     baseDelayMs: 1000
     maxDelayMs: 10000
