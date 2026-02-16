@@ -14,7 +14,7 @@ async function main() {
   console.log("\n🚇 AI-Tunnel v2\n");
 
   // ─── Load config ───────────────────────────────────
-  const config = loadConfig();
+  const config = loadConfig(process.env.TUNNEL_CONFIG || undefined);
   setLogLevel(config.settings.logLevel);
 
   // ─── Create channels ──────────────────────────────
