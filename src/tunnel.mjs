@@ -1,53 +1,61 @@
 // src/tunnel.mjs - SSH 反向隧道管理
 
 import { Client } from "ssh2";
+import { createConnection } from "net";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import { homedir } from "os";
+import { log } from "./logger.mjs";
 
 function expandHome(p) {
   if (p.startsWith("~")) return resolve(homedir(), p.slice(2));
   return resolve(p);
 }
 
-export async function createTunnelManager(config) {
+export function createTunnelManager(config) {
   const { ssh, sites, settings } = config;
+  let conn = null;
+  let destroyed = false;
 
   function connect() {
     return new Promise((resolveP, reject) => {
-      const conn = new Client();
+      conn = new Client();
 
       conn.on("ready", () => {
-        console.log("  🔗 SSH connected");
+        log("info", "SSH", "Connected to %s@%s:%d", ssh.username, ssh.host, ssh.port || 22);
 
         // 为每个站点建立反向隧道
         let pending = sites.length;
+        let hasError = false;
+
         for (const site of sites) {
           conn.forwardIn("127.0.0.1", site.remotePort, (err) => {
             if (err) {
-              console.error(
-                `  ❌ [${site.name}] Failed to forward port ${site.remotePort}: ${err.message}`
-              );
+              log("error", site.name, "Failed to forward port %d: %s", site.remotePort, err.message);
+              hasError = true;
             } else {
-              console.log(
-                `  🔗 [${site.name}] Remote :${site.remotePort} → local :${site.localPort}`
-              );
+              log("info", site.name, "Remote :%d → local :%d", site.remotePort, site.localPort);
             }
-            if (--pending === 0) resolveP(conn);
+            if (--pending === 0) {
+              if (hasError && sites.length === pending) {
+                reject(new Error("All port forwards failed"));
+              } else {
+                resolveP({ conn, shutdown });
+              }
+            }
           });
         }
       });
 
       // 处理反向隧道的入站连接
-      conn.on("tcp connection", (info, accept, reject_) => {
+      conn.on("tcp connection", (info, accept, rejectStream) => {
         const site = sites.find((s) => s.remotePort === info.destPort);
         if (!site) {
-          reject_();
+          rejectStream();
           return;
         }
 
         const stream = accept();
-        const { createConnection } = await_import("net");
         const local = createConnection(
           { port: site.localPort, host: "127.0.0.1" },
           () => {
@@ -57,26 +65,32 @@ export async function createTunnelManager(config) {
         );
 
         local.on("error", (e) => {
-          console.error(`  ❌ [${site.name}] Local connection error: ${e.message}`);
+          log("error", site.name, "Local connection error: %s", e.message);
           stream.end();
         });
 
         stream.on("error", (e) => {
-          console.error(`  ❌ [${site.name}] Stream error: ${e.message}`);
+          log("error", site.name, "Stream error: %s", e.message);
           local.end();
         });
+
+        stream.on("close", () => local.destroy());
+        local.on("close", () => stream.destroy());
       });
 
       conn.on("error", (err) => {
-        console.error(`  ❌ SSH error: ${err.message}`);
+        log("error", "SSH", "Error: %s", err.message);
       });
 
       conn.on("close", () => {
-        console.log(
-          `  ⚠️  SSH disconnected. Reconnecting in ${settings.reconnectInterval}ms...`
-        );
+        if (destroyed) return;
+        log("warn", "SSH", "Disconnected. Reconnecting in %dms...", settings.reconnectInterval);
         setTimeout(() => {
-          connect().catch(() => {});
+          if (!destroyed) {
+            connect().catch((e) => {
+              log("error", "SSH", "Reconnect failed: %s", e.message);
+            });
+          }
         }, settings.reconnectInterval);
       });
 
@@ -87,28 +101,34 @@ export async function createTunnelManager(config) {
         username: ssh.username || "root",
         keepaliveInterval: 10000,
         keepaliveCountMax: 3,
+        readyTimeout: 15000,
       };
 
       if (ssh.privateKeyPath) {
         try {
           connOpts.privateKey = readFileSync(expandHome(ssh.privateKeyPath));
         } catch (e) {
-          throw new Error(`Cannot read SSH key: ${ssh.privateKeyPath} - ${e.message}`);
+          reject(new Error(`Cannot read SSH key: ${ssh.privateKeyPath} - ${e.message}`));
+          return;
         }
       } else if (ssh.password) {
         connOpts.password = ssh.password;
       } else {
-        throw new Error("SSH config needs either 'privateKeyPath' or 'password'");
+        reject(new Error("SSH config needs either 'privateKeyPath' or 'password'"));
+        return;
       }
 
       conn.connect(connOpts);
     });
   }
 
-  return connect();
-}
+  function shutdown() {
+    destroyed = true;
+    if (conn) {
+      conn.end();
+      conn = null;
+    }
+  }
 
-// Dynamic import helper for net module
-function await_import(mod) {
-  return require(mod);
+  return connect();
 }
