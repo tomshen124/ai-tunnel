@@ -1,0 +1,31 @@
+# tunnel.config.yaml - AI-Tunnel 配置文件示例
+# 复制此文件为 tunnel.config.yaml 并修改
+
+# SSH 连接配置
+ssh:
+  host: "YOUR_VPS_IP"            # VPS 公网 IP
+  port: 22
+  username: "root"
+  # 认证方式（二选一）
+  privateKeyPath: "~/.ssh/id_rsa"  # SSH 私钥路径
+  # password: "your-password"      # 或密码认证
+
+# API 站点配置
+sites:
+  - name: "hotaruapi"
+    target: "https://hotaruapi.com"
+    localPort: 8080
+    remotePort: 9090
+    healthCheck: "/v1/models"
+
+  # 添加更多站点:
+  # - name: "another-api"
+  #   target: "https://another-api.com"
+  #   localPort: 8081
+  #   remotePort: 9091
+
+# 全局设置
+settings:
+  reconnectInterval: 5000        # 断线重连间隔（ms）
+  healthCheckInterval: 60000     # 健康检查间隔（ms）
+  logLevel: "info"               # debug | info | warn | error

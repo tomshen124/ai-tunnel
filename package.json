@@ -1,0 +1,32 @@
+{
+  "name": "ai-tunnel",
+  "version": "0.1.0",
+  "description": "Cross-platform API tunnel proxy - bypass CF protection for API endpoints",
+  "type": "module",
+  "main": "src/index.mjs",
+  "bin": {
+    "ai-tunnel": "./src/cli.mjs"
+  },
+  "scripts": {
+    "start": "node src/index.mjs",
+    "dev": "node --watch src/index.mjs"
+  },
+  "keywords": [
+    "api",
+    "tunnel",
+    "proxy",
+    "cloudflare",
+    "bypass",
+    "ssh",
+    "reverse-proxy"
+  ],
+  "author": "tomshen124",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "ssh2": "^1.16.0",
+    "js-yaml": "^4.1.0"
+  }
+}
