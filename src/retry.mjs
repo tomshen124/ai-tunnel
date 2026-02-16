@@ -4,7 +4,7 @@ import { log } from "./logger.mjs";
 
 const DEFAULT_RETRY_CONFIG = {
   maxRetries: 3,
-  retryOn: [429, 502, 503, 504],
+  retryOn: [401, 403, 429, 502, 503, 504],
   backoff: "exponential",
   baseDelayMs: 1000,
   maxDelayMs: 10000,

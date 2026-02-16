@@ -76,6 +76,8 @@ function checkChannel(channel, timeoutMs) {
     if (res.statusCode >= 200 && res.statusCode < 400) {
       const wasUnhealthy = channel.health === "unhealthy";
       setHealth(channel, "healthy", elapsed);
+      // Reset health-check specific fail counter on success
+      channel._healthCheckFails = 0;
       if (wasUnhealthy) {
         log("info", channel.name, "Health check passed (%dms) — recovered", elapsed);
         emit("health", { channel: channel.name, status: "healthy", latency: elapsed });
@@ -99,10 +101,15 @@ function checkChannel(channel, timeoutMs) {
   req.end();
 }
 
+/**
+ * Handle health check failure.
+ * Uses a separate counter (_healthCheckFails) to avoid conflicting
+ * with the request-level consecutiveFails in channel.mjs.
+ */
 function handleCheckFailure(channel, reason) {
-  channel.consecutiveFails = (channel.consecutiveFails || 0) + 1;
+  channel._healthCheckFails = (channel._healthCheckFails || 0) + 1;
 
-  if (channel.consecutiveFails >= UNHEALTHY_THRESHOLD) {
+  if (channel._healthCheckFails >= UNHEALTHY_THRESHOLD) {
     const wasHealthy = channel.health !== "unhealthy";
     setHealth(channel, "unhealthy", null);
     if (wasHealthy) {
@@ -110,6 +117,7 @@ function handleCheckFailure(channel, reason) {
       emit("health", { channel: channel.name, status: "unhealthy", reason });
     }
   } else {
-    log("debug", channel.name, "Health check failed (%s) [%d/%d]", reason, channel.consecutiveFails, UNHEALTHY_THRESHOLD);
+    log("debug", channel.name, "Health check failed (%s) [%d/%d]",
+      reason, channel._healthCheckFails, UNHEALTHY_THRESHOLD);
   }
 }

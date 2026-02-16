@@ -64,7 +64,7 @@ async function main() {
   }
 
   // ─── Start health checks ─────────────────────────
-  const stopHealthChecks = startHealthChecks(channels);
+  let stopHealthChecks = startHealthChecks(channels);
 
   // ─── Start Web UI / API server ────────────────────
   let apiServer = null;
@@ -86,7 +86,7 @@ async function main() {
 
       // Restart health checks
       stopHealthChecks();
-      startHealthChecks(newChannels);
+      stopHealthChecks = startHealthChecks(newChannels);
 
       log("info", "Config", "Hot reload complete (%d channels)", newChannels.length);
     });
@@ -101,7 +101,7 @@ async function main() {
         const newChannels = newConfig.channels.map(createChannel);
         router.update(newChannels, newConfig.routes);
         stopHealthChecks();
-        startHealthChecks(newChannels);
+        stopHealthChecks = startHealthChecks(newChannels);
 
         log("info", "Config", "Manual reload complete");
       } catch (e) {

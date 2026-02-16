@@ -91,10 +91,14 @@ export function createUnifiedProxy(router, retryCtrl, serverCfg) {
         }
 
         // Check if we should retry
-        const { statusCode } = result;
+        const { statusCode, responseBody } = result;
 
-        if (!retryCtrl.shouldRetry(statusCode)) {
-          // Non-retryable error, response already sent
+        if (!retryCtrl.shouldRetry(statusCode) && !retryCtrl.isKeyFailure(statusCode)) {
+          // Non-retryable error — forward the original response to client
+          if (!res.headersSent) {
+            res.writeHead(statusCode, { "content-type": "application/json" });
+            res.end(responseBody || JSON.stringify({ error: { message: `Upstream error: ${statusCode}`, type: "upstream_error" } }));
+          }
           return;
         }
 
@@ -269,9 +273,9 @@ function proxyRequest(req, res, body, channel, key, reqId, startTime) {
           if (statusCode === 401 || statusCode === 403) {
             markKeyFailed(channel, key.index);
           }
-          resolve({ success: false, statusCode });
+          resolve({ success: false, statusCode, responseBody: Buffer.concat(chunks).toString() });
         });
-        pRes.on("error", () => resolve({ success: false, statusCode }));
+        pRes.on("error", () => resolve({ success: false, statusCode, responseBody: null }));
         return;
       }
 
