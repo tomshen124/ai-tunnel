@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, feat/v2]
   pull_request:
-    branches: [main]
+    branches: [main, feat/v2]
 
 jobs:
   test:
@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 5
     strategy:
       matrix:
-        node-version: [18, 20]
+        node-version: [18, 20, 22]
 
     steps:
       - uses: actions/checkout@v4
@@ -25,6 +25,6 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Run tests
-        run: npm test
+      - name: Run tests (CI mock)
+        run: npm run test:ci
         timeout-minutes: 3
