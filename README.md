@@ -1,49 +1,49 @@
 # AI-Tunnel
 
-Cross-platform API tunnel proxy — multi-channel smart routing, automatic failover, and a clean switch panel.
+A cross-platform API tunnel proxy with multi-channel intelligent routing, automatic failover, and a clean switch panel.
 
-## The Problem
+## Problem Background
 
-Third-party AI model API sites (OpenAI-compatible) use Cloudflare Bot Management to block requests from cloud server IP ranges:
+Some third-party AI model API providers (OpenAI-compatible) have enabled Cloudflare Bot Management and block requests coming from cloud/VPS IP ranges:
 
-- ✅ Local machine / home network → API site **works fine**
-- ❌ Cloud server (VPS) → API site **blocked by CF 403**
+- ✅ Local computer / home network → API provider **works normally**
+- ❌ Cloud server (VPS) → API provider **blocked with CF 403**
 
-## The Solution
+## Solution
 
-AI-Tunnel runs on your local machine, using SSH reverse tunnels to relay requests from your VPS through your local network to reach target APIs.
+AI-Tunnel runs on your local computer and uses an SSH reverse tunnel to relay requests from a VPS back to your local machine, then accesses the target API via your residential egress.
 
 ```
-App on VPS → localhost:9000 (unified entry)
-                  ↓ Routing engine (pick channel + key)
-            SSH reverse tunnel
-                  ↓
-            Local reverse proxy → Target API (residential IP, not blocked)
+Apps on VPS → localhost:9000 (single entry)
+                 ↓ routing engine (select channel + key)
+           SSH reverse tunnel
+                 ↓
+        Local reverse proxy → Target API (residential IP, not blocked)
 ```
 
 ## Key Features
 
-- **Unified Entry** — Single port `:9000`, upstream apps only need one address
-- **Multi-Channel Redundancy** — Multiple API sites form a channel pool with automatic failover
-- **API Key Pool** — Multiple keys per channel with rotation to avoid rate limits
-- **Smart Routing** — Priority / Round-Robin / Lowest-Latency strategies
-- **Smart Retry** — 429 swaps key, 5xx swaps channel, exponential backoff
-- **Health Checks** — Periodic channel availability detection, auto-bypass on failure
-- **Web UI** — Clean CC-Switch-style dark panel with real-time status and one-click toggle
-- **Hot Reload** — Change config without restarting
-- **SSE Streaming** — Full support for AI API streaming responses
-- **SSH Tunnel** — Auto-establish, reconnect on disconnect, heartbeat keep-alive
-- **Zero Framework** — Pure Node.js, no express/koa dependencies
+- **Single entry point** — One port `:9000`; upstream apps only need a single base URL
+- **Multi-channel redundancy** — Multiple API providers form a channel pool with automatic failover
+- **API key pool** — Multiple keys per channel; rotate keys to avoid rate limits
+- **Intelligent routing** — Three strategies: Priority / Round-Robin / Lowest-Latency
+- **Smart retries** — Switch keys on 429, switch channels on 5xx, exponential backoff
+- **Health checks** — Periodically probes channel availability and bypasses failures automatically
+- **Web UI** — A minimal CC-Switch-style panel with live status and one-click switching
+- **Hot config reload** — Update config without restarting
+- **SSE streaming** — Full support for streaming responses from AI APIs
+- **SSH tunnel** — Auto connect, reconnect on drop, keep-alive heartbeats
+- **Zero framework** — Pure Node.js; no express/koa dependency
 
 ## Quick Start
 
 ### Install
 
 ```bash
-# Global install
+# Install globally
 npm install -g ai-tunnel
 
-# Or clone and run
+# Or run from source
 git clone https://github.com/tomshen124/ai-tunnel.git
 cd ai-tunnel
 npm install
@@ -52,43 +52,44 @@ npm install
 ### Configure
 
 ```bash
-# Generate config file
+# Generate a config file
 ai-tunnel init
-# Or
+# or
 cp tunnel.config.example.yaml tunnel.config.yaml
 
-# Edit config
+# Edit the config
 vim tunnel.config.yaml
 ```
 
-### Run
+### Start
 
 ```bash
 # Start
 ai-tunnel start
-# Or
+# or
 npm start
-# Or
+# or
 node src/index.mjs
 ```
 
-Once running:
+After starting:
 - **Proxy entry:** `http://127.0.0.1:9000`
 - **Web UI:** `http://127.0.0.1:3000`
 
-### Usage on VPS
+### Use from your VPS application
 
-Set your AI application's API Base URL to:
+Change your AI app's API Base URL to:
 
 ```
 http://localhost:9000
 ```
 
-For example, in OpenClaw config:
+For example, an OpenClaw config:
+
 ```yaml
 providers:
   - baseURL: http://localhost:9000/v1
-    apiKey: sk-your-key  # Keys can be managed in tunnel config
+    apiKey: sk-your-key  # Keys can be centrally managed in the tunnel config
 ```
 
 ## Configuration
@@ -96,7 +97,7 @@ providers:
 ```yaml
 # Server
 server:
-  port: 9000              # Unified proxy entry
+  port: 9000              # unified proxy entry
   host: "127.0.0.1"
   ui:
     enabled: true
@@ -109,14 +110,14 @@ ssh:
   username: "root"
   privateKeyPath: "~/.ssh/id_rsa"
 
-# API Channels
+# API channels
 channels:
   - name: "primary"
     target: "https://api-site.com"
     keys: ["sk-key1", "sk-key2"]
     keyStrategy: "round-robin"    # round-robin | random
-    weight: 10                    # Priority weight
-    tunnel:                       # SSH tunnel config (optional)
+    weight: 10                    # priority weight
+    tunnel:                       # SSH tunnel settings (optional)
       enabled: true
       localPort: 8080
       remotePort: 9090
@@ -128,7 +129,7 @@ channels:
     target: "https://backup-api.com"
     keys: ["sk-backup"]
     weight: 5
-    fallback: true                # Mark as fallback
+    fallback: true                # mark as a fallback channel
 
 # Routing
 routes:
@@ -147,62 +148,62 @@ settings:
 
 ## Web UI
 
-A dark-themed clean switch panel:
+A clean dark-themed switch panel:
 
-- 🟢🔴 Real-time channel status display
-- Latency / success rate / call volume stats
+- 🟢🔴 Real-time channel status
+- Latency / success rate / request volume stats
 - One-click pause/enable channels
-- Live request log scrolling
-- SSE push, no manual refresh needed
+- Live scrolling request logs
+- SSE push updates (no manual refresh)
 
 ## Routing Strategies
 
 | Strategy | Description |
-|----------|-------------|
-| `priority` | Sorted by weight, highest first. Auto-degrade on failure |
-| `round-robin` | Even distribution across channels |
-| `lowest-latency` | Pick the channel with lowest recent latency |
+|------|------|
+| `priority` | Sort by weight; prefer higher priority. Automatically degrades on failures |
+| `round-robin` | Evenly distribute requests by rotation |
+| `lowest-latency` | Choose the channel with the lowest recent latency |
 
 ## Failover
 
 ```
 Request → Channel A (weight: 10)
-            ↓ Failed? (5xx / timeout)
-          Channel B (weight: 5)
-            ↓ Also failed?
-          Return error + log alert
+            ↓ fails? (5xx / timeout)
+         Channel B (weight: 5)
+            ↓ still fails?
+         Return error + log alert
 ```
 
-- 429 Rate Limited → Swap key and retry
-- 401/403 Auth Failed → Mark key invalid, swap key
-- 502/503/504 → Swap channel and retry
-- Exponential backoff to prevent cascading failures
+- Rate-limited (429) → switch key and retry
+- Auth failures (401/403) → mark the key invalid and switch key
+- 502/503/504 → switch channel and retry
+- Exponential backoff to avoid thundering herds
 
 ## v1 Compatibility
 
-The v1 `sites` config format is still supported — it auto-converts to v2 `channels` format on startup.
+The v1 `sites` configuration format is still supported. It will be automatically converted to the v2 `channels` format on startup.
 
 ## Tech Stack
 
 - **Runtime:** Node.js >= 18 (ESM)
-- **SSH:** ssh2 (pure JS, no system dependencies)
+- **SSH:** ssh2 (pure JS, no system dependency)
 - **Config:** js-yaml
-- **HTTP:** Node.js native http/https
+- **HTTP:** Node.js built-in http/https
 - **UI:** htmx + Tailwind CDN (zero build)
 
 ## API
 
 | Endpoint | Method | Description |
-|----------|--------|-------------|
+|------|------|------|
 | `/api/status` | GET | Global status |
 | `/api/channels` | GET | Channel list + status |
-| `/api/channels/:name/toggle` | POST | Enable/disable channel |
-| `/api/channels/:name/keys` | POST | Add key |
-| `/api/channels/:name/keys/:i` | DELETE | Remove key |
-| `/api/logs` | GET | SSE real-time log stream |
-| `/api/logs/recent` | GET | Recent 50 log entries |
-| `/api/stats` | GET | Statistics |
-| `/api/config/reload` | POST | Manual config reload |
+| `/api/channels/:name/toggle` | POST | Enable/disable a channel |
+| `/api/channels/:name/keys` | POST | Add a key |
+| `/api/channels/:name/keys/:i` | DELETE | Delete a key |
+| `/api/logs` | GET | SSE live log stream |
+| `/api/logs/recent` | GET | Most recent 50 log entries |
+| `/api/stats` | GET | Stats |
+| `/api/config/reload` | POST | Manually reload config |
 
 ## License
 
