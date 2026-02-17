@@ -1,0 +1,58 @@
+# test/test.config.yaml - Test configuration for CI (mock API)
+# Used by test/run-ci.mjs for CI environments without real API access
+# For real API tests, use test/run.mjs which generates config dynamically
+
+server:
+  port: 19000
+  host: "127.0.0.1"
+  ui:
+    enabled: true
+    port: 13000
+    host: "127.0.0.1"
+
+channels:
+  - name: "mock-primary"
+    target: "http://127.0.0.1:18001"
+    keys:
+      - "sk-test-key-alpha"
+      - "sk-test-key-beta"
+      - "sk-test-key-gamma"
+    keyStrategy: "round-robin"
+    weight: 10
+    tunnel:
+      enabled: false
+    healthCheck:
+      path: "/v1/models"
+      intervalMs: 600000
+      timeoutMs: 3000
+
+  - name: "mock-backup"
+    target: "http://127.0.0.1:18002"
+    keys:
+      - "sk-backup-key-one"
+      - "sk-backup-key-two"
+    keyStrategy: "round-robin"
+    weight: 5
+    fallback: true
+    tunnel:
+      enabled: false
+    healthCheck:
+      path: "/v1/models"
+      intervalMs: 600000
+      timeoutMs: 3000
+
+routes:
+  - path: "/v1/**"
+    channels: ["mock-primary", "mock-backup"]
+    strategy: "priority"
+
+settings:
+  reconnectInterval: 5000
+  logLevel: "warn"
+  hotReload: false
+  retry:
+    maxRetries: 3
+    retryOn: [429, 502, 503, 504]
+    backoff: "fixed"
+    baseDelayMs: 100
+    maxDelayMs: 500

@@ -1,15 +1,23 @@
 {
-  "name": "ai-tunnel",
-  "version": "0.1.0",
-  "description": "Cross-platform API tunnel proxy - bypass CF protection for API endpoints",
+  "name": "@tomshen124/ai-tunnel",
+  "version": "2.0.0",
+  "description": "Cross-platform API tunnel proxy — multi-channel smart routing, automatic failover, web UI",
   "type": "module",
   "main": "src/index.mjs",
   "bin": {
     "ai-tunnel": "./src/cli.mjs"
   },
+  "files": [
+    "src/",
+    "tunnel.config.example.yaml",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "start": "node src/index.mjs",
-    "dev": "node --watch src/index.mjs"
+    "dev": "node --watch src/index.mjs",
+    "test": "node test/run.mjs",
+    "test:ci": "node test/run-ci.mjs"
   },
   "keywords": [
     "api",
@@ -18,12 +26,24 @@
     "cloudflare",
     "bypass",
     "ssh",
-    "reverse-proxy"
+    "reverse-proxy",
+    "failover",
+    "load-balancer",
+    "openai",
+    "ai"
   ],
   "author": "tomshen124",
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tomshen124/ai-tunnel.git"
+  },
+  "homepage": "https://github.com/tomshen124/ai-tunnel#readme",
+  "bugs": {
+    "url": "https://github.com/tomshen124/ai-tunnel/issues"
   },
   "dependencies": {
     "ssh2": "^1.16.0",

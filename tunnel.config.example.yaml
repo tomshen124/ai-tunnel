@@ -1,31 +1,81 @@
-# tunnel.config.yaml - AI-Tunnel 配置文件示例
+# tunnel.config.yaml - AI-Tunnel v2 配置文件
 # 复制此文件为 tunnel.config.yaml 并修改
 
-# SSH 连接配置
+# ═══════════════════════════════════════
+# 服务配置
+# ═══════════════════════════════════════
+server:
+  # 统一入口端口（VPS 上的应用连这里）
+  port: 9000
+  host: "127.0.0.1"
+
+  # Web UI
+  ui:
+    enabled: true
+    port: 3000
+    host: "127.0.0.1"
+
+# ═══════════════════════════════════════
+# SSH 连接（可选，不用隧道时删除此段）
+# ═══════════════════════════════════════
 ssh:
-  host: "YOUR_VPS_IP"            # VPS 公网 IP
+  host: "YOUR_VPS_IP"
   port: 22
   username: "root"
   # 认证方式（二选一）
-  privateKeyPath: "~/.ssh/id_rsa"  # SSH 私钥路径
-  # password: "your-password"      # 或密码认证
+  privateKeyPath: "~/.ssh/id_rsa"
+  # password: "your-password"
 
-# API 站点配置
-sites:
-  - name: "hotaruapi"
+# ═══════════════════════════════════════
+# API 通道配置
+# ═══════════════════════════════════════
+channels:
+  - name: "hotaru"
     target: "https://hotaruapi.com"
-    localPort: 8080
-    remotePort: 9090
-    healthCheck: "/v1/models"
+    keys:
+      - "sk-your-key-1"
+      - "sk-your-key-2"
+    keyStrategy: "round-robin"     # round-robin | random
+    weight: 10                     # 权重越高优先级越高
+    tunnel:
+      enabled: true
+      localPort: 8080
+      remotePort: 9090
+    healthCheck:
+      path: "/v1/models"
+      intervalMs: 60000
+      timeoutMs: 5000
 
-  # 添加更多站点:
-  # - name: "another-api"
-  #   target: "https://another-api.com"
-  #   localPort: 8081
-  #   remotePort: 9091
+  - name: "backup-api"
+    target: "https://another-api.com"
+    keys:
+      - "sk-backup-key"
+    weight: 5
+    fallback: true                 # 备用通道
+    tunnel:
+      enabled: true
+      localPort: 8081
+      remotePort: 9091
 
+# ═══════════════════════════════════════
+# 路由组（可选，默认全部 channel 走 priority）
+# ═══════════════════════════════════════
+routes:
+  - path: "/v1/**"
+    channels: ["hotaru", "backup-api"]
+    strategy: "priority"           # priority | round-robin | lowest-latency
+
+# ═══════════════════════════════════════
 # 全局设置
+# ═══════════════════════════════════════
 settings:
-  reconnectInterval: 5000        # 断线重连间隔（ms）
-  healthCheckInterval: 60000     # 健康检查间隔（ms）
-  logLevel: "info"               # debug | info | warn | error
+  reconnectInterval: 5000
+  logLevel: "info"                 # debug | info | warn | error
+  hotReload: true                  # 配置变更自动重载
+
+  retry:
+    maxRetries: 3
+    retryOn: [429, 502, 503, 504]
+    backoff: "exponential"         # exponential | fixed
+    baseDelayMs: 1000
+    maxDelayMs: 10000
