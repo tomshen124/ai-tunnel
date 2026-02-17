@@ -1,5 +1,6 @@
-# test/test.config.yaml - Test configuration for ai-tunnel automated tests
-# Uses local mock API servers instead of real endpoints
+# test/test.config.yaml - Test configuration for CI (mock API)
+# Used by test/run-ci.mjs for CI environments without real API access
+# For real API tests, use test/run.mjs which generates config dynamically
 
 server:
   port: 19000
