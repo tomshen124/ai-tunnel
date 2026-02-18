@@ -43,14 +43,21 @@ App on VPS → localhost:9000 (unified entry)
 
 ### Install
 
+**One-line install:**
 ```bash
-# Global install
-npm install -g ai-tunnel
+curl -fsSL https://raw.githubusercontent.com/tomshen124/ai-tunnel/main/install.sh | bash
+```
 
-# Or clone and run
+**Or clone manually:**
+```bash
 git clone https://github.com/tomshen124/ai-tunnel.git
 cd ai-tunnel
 npm install
+```
+
+**Uninstall:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/tomshen124/ai-tunnel/main/install.sh | bash -s -- --uninstall
 ```
 
 ### Configure
