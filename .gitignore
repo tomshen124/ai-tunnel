@@ -26,3 +26,7 @@ Thumbs.db
 *~
 .idea/
 .vscode/
+
+# Electron build output
+dist-electron/
+app/renderer/dist/

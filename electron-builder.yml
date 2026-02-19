@@ -1,0 +1,42 @@
+appId: com.tomshen124.ai-tunnel
+productName: AI-Tunnel
+directories:
+  buildResources: app/assets
+  output: dist-electron
+files:
+  - src/**/*
+  - app/main/**/*
+  - app/preload/**/*
+  - app/renderer/dist/**/*
+  - app/assets/**/*
+  - package.json
+  - node_modules/**/*
+extraMetadata:
+  main: app/main/index.mjs
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+    - zip
+  # TODO: code signing
+win:
+  target:
+    - nsis
+    - portable
+  # TODO: code signing
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Development
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+dmg:
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
