@@ -18,16 +18,18 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+          cache: 'npm'
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install dependencies (prod only)
+        run: npm ci --omit=dev
 
       - name: Run tests
         run: npm run test:ci
         timeout-minutes: 3
 
   publish:
+    if: ${{ secrets.NPM_TOKEN != '' }}
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -36,10 +38,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           registry-url: https://registry.npmjs.org/
+          cache: 'npm'
       - name: Install dependencies
-        run: npm install
+        run: npm ci
       - name: Publish to npm
         run: npm publish --access public
         env:
@@ -52,15 +55,52 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extract version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.VERSION }}
-          name: Release ${{ steps.version.outputs.VERSION }}
+          name: Release ${{ github.ref_name }}
           generate_release_notes: true
           draft: false
-          prerelease: ${{ contains(steps.version.outputs.VERSION, '-') }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
+
+  electron:
+    needs: release
+    name: Build Electron (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Electron dist
+        run: npm run electron:dist
+
+      - name: Upload artifacts (dist-electron)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-tunnel-${{ matrix.os }}
+          path: |
+            dist-electron/**
+            !dist-electron/**/.cache/**
+
+      - name: Upload assets to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            dist-electron/**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
