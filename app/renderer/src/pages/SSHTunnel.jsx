@@ -6,14 +6,26 @@ export default function SSHTunnel({ config, setConfig, saveConfig }) {
   const ssh = config?.ssh || {};
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
+  const [saveStatus, setSaveStatus] = useState(null);
 
   function updateSSH(field, value) {
     const newSSH = { ...ssh, [field]: value };
     setConfig({ ...config, ssh: newSSH });
+    setSaveStatus(null);
   }
 
   async function save() {
-    await saveConfig(config);
+    try {
+      const result = await saveConfig(config);
+      if (result?.ok) {
+        setSaveStatus({ ok: true, message: 'Saved!' });
+      } else {
+        setSaveStatus({ ok: false, message: result?.error || 'Save failed' });
+      }
+    } catch (err) {
+      setSaveStatus({ ok: false, message: err.message || 'Save failed' });
+    }
+    setTimeout(() => setSaveStatus(null), 3000);
   }
 
   async function testConnection() {
@@ -128,6 +140,11 @@ export default function SSHTunnel({ config, setConfig, saveConfig }) {
           >
             Save
           </button>
+          {saveStatus && (
+            <span className={`text-sm ${saveStatus.ok ? 'text-green-400' : 'text-red-400'}`}>
+              {saveStatus.ok ? `✓ ${saveStatus.message}` : `✕ ${saveStatus.message}`}
+            </span>
+          )}
           {testResult && (
             <span className={`text-sm ${testResult.ok ? 'text-green-400' : 'text-red-400'}`}>
               {testResult.ok ? `✓ ${testResult.message}` : `✕ ${testResult.error}`}
