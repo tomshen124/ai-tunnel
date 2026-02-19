@@ -24,8 +24,10 @@ export function createTunnelManager(config) {
   function connect() {
     return new Promise((resolveP, reject) => {
       conn = new Client();
+      let settled = false;
 
       conn.on("ready", () => {
+        settled = true;
         log("info", "SSH", "Connected to %s@%s:%d", ssh.username || "root", ssh.host, ssh.port || 22);
 
         let pending = sites.length;
@@ -46,81 +48,128 @@ export function createTunnelManager(config) {
         }
       });
 
-      // Handle inbound connections on forwarded ports
-      conn.on("tcp connection", (info, accept, rejectStream) => {
-        const site = sites.find((s) => s.remotePort === info.destPort);
-        if (!site) {
-          rejectStream();
-          return;
-        }
-
-        const stream = accept();
-        const local = createConnection(
-          { port: site.localPort, host: "127.0.0.1" },
-          () => {
-            stream.pipe(local);
-            local.pipe(stream);
-          }
-        );
-
-        local.on("error", (e) => {
-          log("error", site.name, "Local connection error: %s", e.message);
-          stream.destroy();
-        });
-
-        stream.on("error", (e) => {
-          log("error", site.name, "Stream error: %s", e.message);
-          local.destroy();
-        });
-
-        stream.on("close", () => local.destroy());
-        local.on("close", () => stream.destroy());
-      });
+      conn.on("tcp connection", handleTcpConnection);
 
       conn.on("error", (err) => {
         log("error", "SSH", "Error: %s", err.message);
-        // If we haven't resolved yet, reject the promise
-        reject(err);
+        if (!settled) {
+          settled = true;
+          reject(err);
+        }
       });
 
       conn.on("close", () => {
         if (destroyed) return;
         log("warn", "SSH", "Disconnected. Reconnecting in %dms...", settings.reconnectInterval);
         reconnectTimer = setTimeout(() => {
-          if (!destroyed) {
-            connect().catch((e) => {
-              log("error", "SSH", "Reconnect failed: %s", e.message);
-            });
-          }
+          if (!destroyed) reconnect();
         }, settings.reconnectInterval);
       });
 
-      // Build connection options
-      const connOpts = {
-        host: ssh.host,
-        port: ssh.port || 22,
-        username: ssh.username || "root",
-        keepaliveInterval: 10000,
-        keepaliveCountMax: 3,
-        readyTimeout: 15000,
-      };
-
-      if (ssh.privateKeyPath) {
-        try {
-          connOpts.privateKey = readFileSync(expandHome(ssh.privateKeyPath));
-        } catch (e) {
-          reject(new Error(`Cannot read SSH key: ${ssh.privateKeyPath} - ${e.message}`));
-          return;
-        }
-      } else if (ssh.password) {
-        connOpts.password = ssh.password;
-      } else {
-        reject(new Error("SSH config needs either 'privateKeyPath' or 'password'"));
+      const connOpts = buildConnOpts();
+      if (!connOpts) {
+        reject(new Error("Invalid SSH configuration"));
         return;
       }
-
       conn.connect(connOpts);
     });
+  }
+
+  // Reconnect without creating a new promise chain — fire-and-forget with logging
+  function reconnect() {
+    conn = new Client();
+    let settled = false;
+
+    conn.on("ready", () => {
+      settled = true;
+      log("info", "SSH", "Reconnected to %s@%s:%d", ssh.username || "root", ssh.host, ssh.port || 22);
+
+      for (const site of sites) {
+        conn.forwardIn("127.0.0.1", site.remotePort, (err) => {
+          if (err) {
+            log("error", site.name, "Failed to forward port %d: %s", site.remotePort, err.message);
+          } else {
+            log("info", site.name, "Remote :%d → local :%d (reconnected)", site.remotePort, site.localPort);
+          }
+        });
+      }
+    });
+
+    conn.on("tcp connection", handleTcpConnection);
+
+    conn.on("error", (err) => {
+      log("error", "SSH", "Reconnect error: %s", err.message);
+    });
+
+    conn.on("close", () => {
+      if (destroyed) return;
+      log("warn", "SSH", "Disconnected again. Reconnecting in %dms...", settings.reconnectInterval);
+      reconnectTimer = setTimeout(() => {
+        if (!destroyed) reconnect();
+      }, settings.reconnectInterval);
+    });
+
+    const connOpts = buildConnOpts();
+    if (!connOpts) return;
+    conn.connect(connOpts);
+  }
+
+  // Shared TCP connection handler
+  function handleTcpConnection(info, accept, rejectStream) {
+    const site = sites.find((s) => s.remotePort === info.destPort);
+    if (!site) {
+      rejectStream();
+      return;
+    }
+
+    const stream = accept();
+    const local = createConnection(
+      { port: site.localPort, host: "127.0.0.1" },
+      () => {
+        stream.pipe(local);
+        local.pipe(stream);
+      }
+    );
+
+    local.on("error", (e) => {
+      log("error", site.name, "Local connection error: %s", e.message);
+      stream.destroy();
+    });
+
+    stream.on("error", (e) => {
+      log("error", site.name, "Stream error: %s", e.message);
+      local.destroy();
+    });
+
+    stream.on("close", () => local.destroy());
+    local.on("close", () => stream.destroy());
+  }
+
+  // Build SSH connection options
+  function buildConnOpts() {
+    const connOpts = {
+      host: ssh.host,
+      port: ssh.port || 22,
+      username: ssh.username || "root",
+      keepaliveInterval: 10000,
+      keepaliveCountMax: 3,
+      readyTimeout: 15000,
+    };
+
+    if (ssh.privateKeyPath) {
+      try {
+        connOpts.privateKey = readFileSync(expandHome(ssh.privateKeyPath));
+      } catch (e) {
+        log("error", "SSH", "Cannot read SSH key: %s - %s", ssh.privateKeyPath, e.message);
+        return null;
+      }
+    } else if (ssh.password) {
+      connOpts.password = ssh.password;
+    } else {
+      log("error", "SSH", "SSH config needs either 'privateKeyPath' or 'password'");
+      return null;
+    }
+    return connOpts;
   }
 
   function shutdown() {

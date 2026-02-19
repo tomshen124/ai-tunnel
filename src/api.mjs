@@ -24,12 +24,16 @@ function getUiHtml() {
 
 /**
  * Create the API + UI server.
+ * If opts.token is set, all /api/* requests (except SSE) require
+ * Authorization: Bearer <token> header.
  */
 export function createApiServer(router, opts) {
+  const authToken = opts.token || process.env.AI_TUNNEL_API_TOKEN || null;
+
   const server = createServer(async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
     if (req.method === "OPTIONS") {
       res.writeHead(204);
@@ -38,6 +42,14 @@ export function createApiServer(router, opts) {
 
     const url = new URL(req.url, `http://${req.headers.host}`);
     const path = url.pathname;
+
+    // Authenticate /api/* endpoints (skip the UI itself)
+    if (authToken && path.startsWith("/api/")) {
+      const provided = req.headers.authorization?.replace(/^Bearer\s+/i, "");
+      if (provided !== authToken) {
+        return json(res, 401, { error: "Unauthorized — set Authorization: Bearer <token>" });
+      }
+    }
 
     try {
       // ─── API Routes ────────────────────────────
@@ -94,6 +106,10 @@ export function createApiServer(router, opts) {
       }
     }
   });
+
+  server.headersTimeout = 5000; // 5s for headers
+  server.keepAliveTimeout = 15000; // 15s keep-alive
+  server.timeout = 0; // SSE needs long-lived connections
 
   server.listen(opts.port, opts.host, () => {
     log("info", "UI", "Web UI available at http://%s:%d", opts.host, opts.port);
@@ -164,6 +180,7 @@ async function handleAddKey(router, name, req, res) {
   if (!ch) return json(res, 404, { error: `Channel '${name}' not found` });
 
   const body = await readBody(req);
+  if (body === null) return json(res, 413, { error: "Request body too large" });
   try {
     const { key } = JSON.parse(body);
     if (!key) return json(res, 400, { error: "Missing 'key' field" });
@@ -216,11 +233,20 @@ function json(res, status, data) {
   res.end(JSON.stringify(data));
 }
 
+const MAX_API_BODY_SIZE = 1024 * 1024; // 1 MB for API requests
+
 function readBody(req) {
   return new Promise((r) => {
     const chunks = [];
-    req.on("data", (c) => chunks.push(c));
-    req.on("end", () => r(Buffer.concat(chunks).toString()));
-    req.on("error", () => r(""));
+    let size = 0;
+    req.on("data", (c) => {
+      size += c.length;
+      if (size <= MAX_API_BODY_SIZE) chunks.push(c);
+    });
+    req.on("end", () => {
+      if (size > MAX_API_BODY_SIZE) return r(null);
+      r(Buffer.concat(chunks).toString());
+    });
+    req.on("error", () => r(null));
   });
 }

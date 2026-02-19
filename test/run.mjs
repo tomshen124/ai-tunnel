@@ -19,10 +19,16 @@ const UI_PORT = 13000;
 const BASE = `http://127.0.0.1:${PROXY_PORT}`;
 const UI_BASE = `http://127.0.0.1:${UI_PORT}`;
 
-// ─── Real API config ────────────────────────────────
-const REAL_API_TARGET = "https://wzw.pp.ua";
-const REAL_API_KEY = "sk-he1i2RCiwFRJTFanih1tgEJxBOhKJsLLMaNxTHQI2rK32Jkf";
-const TEST_MODEL = "claude-haiku-4-5-20251001";
+// ─── Real API config (from environment variables) ───
+const REAL_API_TARGET = process.env.TEST_API_TARGET || "https://wzw.pp.ua";
+const REAL_API_KEY = process.env.TEST_API_KEY;
+const TEST_MODEL = process.env.TEST_MODEL || "claude-haiku-4-5-20251001";
+
+if (!REAL_API_KEY) {
+  console.error("❌ TEST_API_KEY environment variable is required.");
+  console.error("   Usage: TEST_API_KEY=sk-xxx node test/run.mjs");
+  process.exit(1);
+}
 
 // ─── Test runner ─────────────────────────────────────
 

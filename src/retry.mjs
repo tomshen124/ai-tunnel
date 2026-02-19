@@ -20,10 +20,18 @@ const CHANNEL_FAILURE_CODES = [502, 503, 504];
  * Create a retry controller from config.
  */
 export function createRetryController(config) {
-  const cfg = { ...DEFAULT_RETRY_CONFIG, ...config };
+  let cfg = { ...DEFAULT_RETRY_CONFIG, ...config };
 
   return {
-    config: cfg,
+    get config() { return cfg; },
+
+    /**
+     * Update retry configuration (for hot reload).
+     */
+    update(newConfig) {
+      cfg = { ...DEFAULT_RETRY_CONFIG, ...newConfig };
+      log("info", "Retry", "Config updated (maxRetries=%d)", cfg.maxRetries);
+    },
 
     /**
      * Determine if a response status code should trigger a retry.

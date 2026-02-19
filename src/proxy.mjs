@@ -1,8 +1,15 @@
 // src/proxy.mjs - Unified reverse proxy with router integration and retry/failover
+//
+// Key design decisions:
+//   1. HTTP Agent with keep-alive per target (avoids TCP+TLS per request)
+//   2. Strip all proxy-revealing headers (anti-detection)
+//   3. Server-level and body-read timeouts (prevent hangs)
+//   4. Client disconnect detection → abort upstream immediately
+//   5. Respect 429 Retry-After header
 
 import { createServer } from "http";
-import { request as httpsRequest } from "https";
-import { request as httpRequest } from "http";
+import { request as httpsRequest, Agent as HttpsAgent } from "https";
+import { request as httpRequest, Agent as HttpAgent } from "http";
 import { log, emit } from "./logger.mjs";
 import {
   recordSuccess,
@@ -12,35 +19,115 @@ import {
 } from "./channel.mjs";
 import { sleep } from "./retry.mjs";
 
+// ─── Constants ──────────────────────────────────────────
+const MAX_BODY_SIZE = 10 * 1024 * 1024; // 10 MB
+const BODY_READ_TIMEOUT_MS = 15000; // 15s to receive full body
+const UPSTREAM_TIMEOUT_MS = 30000; // 30s upstream connect+headers
+const MAX_SOCKETS_PER_TARGET = 16; // keep-alive pool size
+
+// Headers that reveal we are a proxy — MUST strip before forwarding
+const STRIP_HEADERS = new Set([
+  // Hop-by-hop
+  "connection",
+  "keep-alive",
+  "transfer-encoding",
+  "upgrade",
+  "proxy-connection",
+  "proxy-authorization",
+  // Proxy-indicator
+  "x-forwarded-for",
+  "x-forwarded-proto",
+  "x-forwarded-host",
+  "x-forwarded-port",
+  "x-real-ip",
+  "via",
+  "forwarded",
+]);
+
+// ─── Connection pool (per unique origin) ────────────────
+const agentPool = new Map(); // "host:port:proto" → Agent
+
+function getAgent(hostname, port, isHttps) {
+  const key = `${hostname}:${port}:${isHttps ? "s" : ""}`;
+  let agent = agentPool.get(key);
+  if (!agent) {
+    const Ctor = isHttps ? HttpsAgent : HttpAgent;
+    agent = new Ctor({
+      keepAlive: true,
+      keepAliveMsecs: 30000,
+      maxSockets: MAX_SOCKETS_PER_TARGET,
+      maxFreeSockets: 4,
+      timeout: 60000,
+    });
+    agentPool.set(key, agent);
+    log("debug", "Pool", "Created agent for %s", key);
+  }
+  return agent;
+}
+
+/** Destroy all pooled agents (called on shutdown). */
+export function destroyAgentPool() {
+  for (const [key, agent] of agentPool) {
+    agent.destroy();
+  }
+  agentPool.clear();
+}
+
+// ─── URL cache (avoid new URL() per request) ────────────
+const urlCache = new Map();
+function cachedURL(str) {
+  let u = urlCache.get(str);
+  if (!u) {
+    u = new URL(str);
+    urlCache.set(str, u);
+  }
+  return u;
+}
+
+// ─── Main entry ─────────────────────────────────────────
+
 /**
  * Create the unified proxy server.
- * All incoming requests go through the router to select channel + key.
- *
- * @param {object} router - Router engine
- * @param {object} retryCtrl - Retry controller
- * @param {object} serverCfg - { port, host }
  */
 export function createUnifiedProxy(router, retryCtrl, serverCfg) {
   const server = createServer(async (req, res) => {
     const startTime = Date.now();
     const reqId = Math.random().toString(36).slice(2, 8);
 
+    // Track client disconnect so we can abort early
+    // Use res "close" — fires when TCP connection drops before response finishes
+    let clientGone = false;
+    res.on("close", () => {
+      if (!res.writableEnded) clientGone = true;
+    });
+
     log("debug", "Proxy", "[%s] %s %s", reqId, req.method, req.url);
 
-    // Buffer the request body so we can replay on retry
-    const bodyChunks = [];
-    for await (const chunk of req) {
-      bodyChunks.push(chunk);
+    // ── Buffer request body with timeout ─────────────
+    let body;
+    try {
+      body = await readRequestBody(req);
+    } catch (e) {
+      if (!res.headersSent) {
+        const code = e.code === "BODY_TOO_LARGE" ? 413 : 408;
+        res.writeHead(code, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: { message: e.message, type: "proxy_error" } }));
+      }
+      return;
     }
-    const body = Buffer.concat(bodyChunks);
 
-    // Attempt routing with retries
+    // ── Retry loop ───────────────────────────────────
     const excludeChannels = [];
     let attempt = 0;
     const maxAttempts = retryCtrl.maxRetries + 1;
 
     while (attempt < maxAttempts) {
-      // Pick a channel (exclude previously failed channels for channel-level errors)
+      // Bail out if client already disconnected
+      if (clientGone) {
+        log("debug", "Proxy", "[%s] Client disconnected, aborting", reqId);
+        return;
+      }
+
       const resolved =
         excludeChannels.length > 0
           ? router.resolveNext(req.url, excludeChannels)
@@ -49,25 +136,10 @@ export function createUnifiedProxy(router, retryCtrl, serverCfg) {
       if (!resolved) {
         const elapsed = Date.now() - startTime;
         log("error", "Proxy", "[%s] No available channel for %s (%dms)", reqId, req.url, elapsed);
-        emit("request", {
-          id: reqId,
-          method: req.method,
-          path: req.url,
-          status: 503,
-          elapsed,
-          channel: null,
-          error: "No available channel",
-        });
+        emit("request", { id: reqId, method: req.method, path: req.url, status: 503, elapsed, channel: null, error: "No available channel" });
         if (!res.headersSent) {
           res.writeHead(503, { "content-type": "application/json" });
-          res.end(
-            JSON.stringify({
-              error: {
-                message: "No available API channel",
-                type: "proxy_error",
-              },
-            })
-          );
+          res.end(JSON.stringify({ error: { message: "No available API channel", type: "proxy_error" } }));
         }
         return;
       }
@@ -75,47 +147,35 @@ export function createUnifiedProxy(router, retryCtrl, serverCfg) {
       const { channel, key } = resolved;
 
       try {
-        const result = await proxyRequest(
-          req,
-          res,
-          body,
-          channel,
-          key,
-          reqId,
-          startTime
-        );
+        const result = await proxyRequest(req, res, body, channel, key, reqId, startTime, clientGone);
 
-        // Success or non-retryable status
-        if (result.success) {
-          return; // Response already sent
-        }
+        if (result.success) return;
 
-        // Check if we should retry
-        const { statusCode, responseBody } = result;
+        const { statusCode, retryAfterMs } = result;
 
+        // Non-retryable → forward as-is
         if (!retryCtrl.shouldRetry(statusCode) && !retryCtrl.isKeyFailure(statusCode)) {
-          // Non-retryable error — forward the original response to client
           if (!res.headersSent) {
             res.writeHead(statusCode, { "content-type": "application/json" });
-            res.end(responseBody || JSON.stringify({ error: { message: `Upstream error: ${statusCode}`, type: "upstream_error" } }));
+            res.end(result.responseBody || JSON.stringify({ error: { message: `Upstream error: ${statusCode}`, type: "upstream_error" } }));
           }
           return;
         }
 
-        // Key-level failure: mark key, try same channel with different key
+        // Key failure (401/403)
         if (retryCtrl.isKeyFailure(statusCode)) {
           markKeyFailed(channel, key.index);
           log("warn", channel.name, "[%s] Key #%d failed (%d), rotating...", reqId, key.index, statusCode);
         }
 
-        // Channel-level failure: exclude this channel, try another
+        // Channel failure (5xx)
         if (retryCtrl.isChannelFailure(statusCode)) {
           excludeChannels.push(channel.name);
           recordFailure(channel, `HTTP ${statusCode}`);
           log("warn", channel.name, "[%s] Channel error (%d), failing over...", reqId, statusCode);
         }
 
-        // Rate limited: wait before retry
+        // Rate limited (429) — respect Retry-After if provided
         if (statusCode === 429) {
           markKeyFailed(channel, key.index);
           log("warn", channel.name, "[%s] Rate limited, backing off...", reqId);
@@ -123,19 +183,13 @@ export function createUnifiedProxy(router, retryCtrl, serverCfg) {
 
         attempt++;
         if (attempt < maxAttempts) {
-          const delay = retryCtrl.getDelay(attempt - 1);
+          // Use upstream Retry-After if available, otherwise our own backoff
+          const delay = retryAfterMs || retryCtrl.getDelay(attempt - 1);
           log("info", "Retry", "[%s] Attempt %d/%d in %dms", reqId, attempt + 1, maxAttempts, Math.round(delay));
-          emit("retry", {
-            id: reqId,
-            attempt,
-            maxAttempts,
-            fromChannel: channel.name,
-            delay: Math.round(delay),
-          });
+          emit("retry", { id: reqId, attempt, maxAttempts, fromChannel: channel.name, delay: Math.round(delay) });
           await sleep(delay);
         }
       } catch (err) {
-        // Network error or proxy error
         recordFailure(channel, err.message);
         excludeChannels.push(channel.name);
 
@@ -143,53 +197,33 @@ export function createUnifiedProxy(router, retryCtrl, serverCfg) {
         if (attempt < maxAttempts) {
           const delay = retryCtrl.getDelay(attempt - 1);
           log("warn", channel.name, "[%s] Error: %s, retrying in %dms", reqId, err.message, Math.round(delay));
-          emit("retry", {
-            id: reqId,
-            attempt,
-            maxAttempts,
-            fromChannel: channel.name,
-            delay: Math.round(delay),
-          });
+          emit("retry", { id: reqId, attempt, maxAttempts, fromChannel: channel.name, delay: Math.round(delay) });
           await sleep(delay);
         } else {
-          // All retries exhausted
           const elapsed = Date.now() - startTime;
           log("error", "Proxy", "[%s] All retries exhausted (%dms)", reqId, elapsed);
-          emit("request", {
-            id: reqId,
-            method: req.method,
-            path: req.url,
-            status: 502,
-            elapsed,
-            channel: channel.name,
-            error: err.message,
-          });
+          emit("request", { id: reqId, method: req.method, path: req.url, status: 502, elapsed, channel: channel.name, error: err.message });
           if (!res.headersSent) {
             res.writeHead(502, { "content-type": "application/json" });
-            res.end(
-              JSON.stringify({
-                error: {
-                  message: `All retries exhausted: ${err.message}`,
-                  type: "proxy_error",
-                },
-              })
-            );
+            res.end(JSON.stringify({ error: { message: `All retries exhausted: ${err.message}`, type: "proxy_error" } }));
           }
           return;
         }
       }
     }
 
-    // Should not reach here, but just in case
+    // Fallthrough guard
     if (!res.headersSent) {
       res.writeHead(502, { "content-type": "application/json" });
-      res.end(
-        JSON.stringify({
-          error: { message: "Proxy error: retries exhausted", type: "proxy_error" },
-        })
-      );
+      res.end(JSON.stringify({ error: { message: "Proxy error: retries exhausted", type: "proxy_error" } }));
     }
   });
+
+  // ── Server-level timeouts (prevent slow-client hangs) ──
+  server.headersTimeout = 10000; // 10s to receive headers
+  server.requestTimeout = 180000; // 3min total (covers long SSE streams)
+  server.keepAliveTimeout = 30000; // 30s keep-alive idle
+  server.timeout = 0; // disable per-socket timeout (we manage our own)
 
   server.listen(serverCfg.port, serverCfg.host, () => {
     log("info", "Proxy", "Unified proxy listening on %s:%d", serverCfg.host, serverCfg.port);
@@ -206,35 +240,87 @@ export function createUnifiedProxy(router, retryCtrl, serverCfg) {
   return server;
 }
 
-/**
- * Proxy a single request to a specific channel + key.
- * Returns { success, statusCode } — does NOT send response on retryable errors
- * (the caller needs to check and decide whether to retry).
- *
- * For non-retryable responses (success or client errors), the response is streamed directly.
- */
-function proxyRequest(req, res, body, channel, key, reqId, startTime) {
+// ─── Body reader with timeout ───────────────────────────
+
+function readRequestBody(req) {
   return new Promise((resolve, reject) => {
-    // Determine effective target: tunnel local port or direct
+    const chunks = [];
+    let size = 0;
+    let done = false;
+
+    const timer = setTimeout(() => {
+      if (!done) {
+        done = true;
+        req.destroy();
+        const err = new Error("Request body read timeout");
+        err.code = "BODY_TIMEOUT";
+        reject(err);
+      }
+    }, BODY_READ_TIMEOUT_MS);
+
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > MAX_BODY_SIZE) {
+        if (!done) {
+          done = true;
+          clearTimeout(timer);
+          req.destroy();
+          const err = new Error("Request body too large");
+          err.code = "BODY_TOO_LARGE";
+          reject(err);
+        }
+        return;
+      }
+      chunks.push(chunk);
+    });
+
+    req.on("end", () => {
+      if (!done) {
+        done = true;
+        clearTimeout(timer);
+        resolve(Buffer.concat(chunks));
+      }
+    });
+
+    req.on("error", (e) => {
+      if (!done) {
+        done = true;
+        clearTimeout(timer);
+        reject(e);
+      }
+    });
+  });
+}
+
+// ─── Single proxy request ───────────────────────────────
+
+function proxyRequest(req, res, body, channel, key, reqId, startTime, clientGone) {
+  return new Promise((resolve, reject) => {
+    // Resolve target URL (tunnel or direct)
     let targetUrl;
     if (channel.tunnel?.enabled && channel.tunnel.localPort) {
-      targetUrl = new URL(`http://127.0.0.1:${channel.tunnel.localPort}`);
+      targetUrl = cachedURL(`http://127.0.0.1:${channel.tunnel.localPort}`);
     } else {
-      targetUrl = new URL(channel.target);
+      targetUrl = cachedURL(channel.target);
     }
 
     const isHttps = targetUrl.protocol === "https:";
     const requestFn = isHttps ? httpsRequest : httpRequest;
+    const agent = getAgent(targetUrl.hostname, targetUrl.port || (isHttps ? 443 : 80), isHttps);
+    const targetHost = cachedURL(channel.target).hostname;
 
     const opts = {
       hostname: targetUrl.hostname,
       port: targetUrl.port || (isHttps ? 443 : 80),
       path: req.url,
       method: req.method,
+      timeout: UPSTREAM_TIMEOUT_MS,
+      agent,
       headers: {
-        ...filterHopHeaders(req.headers),
-        host: new URL(channel.target).hostname,
+        ...sanitizeHeaders(req.headers),
+        host: targetHost,
         authorization: `Bearer ${key.value}`,
+        "content-length": String(body.length),
       },
     };
 
@@ -246,55 +332,44 @@ function proxyRequest(req, res, body, channel, key, reqId, startTime) {
         statusCode < 400 ? "info" : "warn",
         channel.name,
         "[%s] %s %s → %d (%dms)",
-        reqId,
-        req.method,
-        req.url,
-        statusCode,
-        elapsed
+        reqId, req.method, req.url, statusCode, elapsed
       );
 
-      // If retryable and we haven't sent headers, buffer the error response
-      // and return control to the caller for retry
+      // ── Retryable status → buffer response, return to caller ──
       if (
-        statusCode === 429 ||
-        statusCode === 401 ||
-        statusCode === 403 ||
-        statusCode === 502 ||
-        statusCode === 503 ||
-        statusCode === 504
+        statusCode === 429 || statusCode === 401 || statusCode === 403 ||
+        statusCode === 502 || statusCode === 503 || statusCode === 504
       ) {
-        // Consume the response body to free the connection
         const chunks = [];
         pRes.on("data", (c) => chunks.push(c));
         pRes.on("end", () => {
-          if (statusCode >= 500 || statusCode === 429) {
-            recordFailure(channel, `HTTP ${statusCode}`);
+          // Parse Retry-After header (seconds or HTTP-date)
+          let retryAfterMs = null;
+          const ra = pRes.headers["retry-after"];
+          if (ra) {
+            const secs = parseInt(ra, 10);
+            if (!isNaN(secs)) {
+              retryAfterMs = secs * 1000;
+            } else {
+              const date = new Date(ra);
+              if (!isNaN(date)) retryAfterMs = Math.max(0, date - Date.now());
+            }
           }
-          if (statusCode === 401 || statusCode === 403) {
-            markKeyFailed(channel, key.index);
-          }
-          resolve({ success: false, statusCode, responseBody: Buffer.concat(chunks).toString() });
+          resolve({ success: false, statusCode, responseBody: Buffer.concat(chunks).toString(), retryAfterMs });
         });
-        pRes.on("error", () => resolve({ success: false, statusCode, responseBody: null }));
+        pRes.on("error", () => resolve({ success: false, statusCode, responseBody: null, retryAfterMs: null }));
         return;
       }
 
-      // Non-retryable: stream the response directly
+      // ── Non-retryable → stream directly to client ──
       if (statusCode < 400) {
         recordSuccess(channel, elapsed);
         markKeySuccess(channel, key.index);
       }
 
-      emit("request", {
-        id: reqId,
-        method: req.method,
-        path: req.url,
-        status: statusCode,
-        elapsed,
-        channel: channel.name,
-      });
+      emit("request", { id: reqId, method: req.method, path: req.url, status: statusCode, elapsed, channel: channel.name });
 
-      // Pass through headers, ensuring SSE streams aren't buffered
+      // Pass through headers; disable buffering for SSE
       const headers = { ...pRes.headers };
       if (headers["content-type"]?.includes("text/event-stream")) {
         headers["cache-control"] = "no-cache";
@@ -304,6 +379,11 @@ function proxyRequest(req, res, body, channel, key, reqId, startTime) {
       res.writeHead(statusCode, headers);
       pRes.pipe(res);
 
+      // If client disconnects during streaming, tear down upstream
+      res.on("close", () => {
+        if (!pRes.complete) pRes.destroy();
+      });
+
       pRes.on("error", (e) => {
         log("error", channel.name, "[%s] Response stream error: %s", reqId, e.message);
         res.end();
@@ -312,11 +392,12 @@ function proxyRequest(req, res, body, channel, key, reqId, startTime) {
       resolve({ success: true, statusCode });
     });
 
-    proxy.on("error", (e) => {
-      reject(e);
+    proxy.on("error", (e) => reject(e));
+    proxy.on("timeout", () => {
+      proxy.destroy(new Error(`Upstream timeout after ${UPSTREAM_TIMEOUT_MS}ms`));
     });
 
-    // Send the buffered body
+    // Send buffered body
     if (body.length > 0) {
       proxy.end(body);
     } else {
@@ -325,15 +406,18 @@ function proxyRequest(req, res, body, channel, key, reqId, startTime) {
   });
 }
 
-/**
- * Filter out hop-by-hop headers.
- */
-function filterHopHeaders(headers) {
-  const filtered = { ...headers };
-  delete filtered["connection"];
-  delete filtered["keep-alive"];
-  delete filtered["transfer-encoding"];
-  delete filtered["upgrade"];
-  delete filtered["proxy-connection"];
-  return filtered;
+// ─── Header sanitization (anti-detection) ───────────────
+
+function sanitizeHeaders(headers) {
+  const clean = {};
+  for (const [key, value] of Object.entries(headers)) {
+    const lower = key.toLowerCase();
+    if (STRIP_HEADERS.has(lower)) continue;
+    // Don't forward the original authorization — we set our own
+    if (lower === "authorization") continue;
+    // Don't forward original content-length — we recalculate from buffered body
+    if (lower === "content-length") continue;
+    clean[key] = value;
+  }
+  return clean;
 }

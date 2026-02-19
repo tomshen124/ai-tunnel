@@ -2,6 +2,9 @@
 
 import { log } from "./logger.mjs";
 
+// Keys disabled by failures are automatically re-enabled after this cooldown
+const KEY_RECOVERY_MS = 5 * 60 * 1000; // 5 minutes
+
 /**
  * Create a Channel instance from config.
  *
@@ -13,6 +16,7 @@ export function createChannel(cfg) {
     value: k,
     alive: true,
     failCount: 0,
+    disabledAt: null, // timestamp when key was disabled
   }));
 
   const channel = {
@@ -51,8 +55,20 @@ export function createChannel(cfg) {
 /**
  * Pick the next API key using the configured strategy.
  * Returns { value, index } or null if no alive keys.
+ * Automatically recovers keys that have been disabled longer than KEY_RECOVERY_MS.
  */
 export function pickKey(channel) {
+  // Auto-recover keys past their cooldown
+  const now = Date.now();
+  for (const k of channel._keys) {
+    if (!k.alive && k.disabledAt && now - k.disabledAt >= KEY_RECOVERY_MS) {
+      k.alive = true;
+      k.failCount = 0;
+      k.disabledAt = null;
+      log("info", channel.name, "Key auto-recovered after cooldown");
+    }
+  }
+
   const alive = channel._keys.filter((k) => k.alive);
   if (alive.length === 0) return null;
 
@@ -90,7 +106,8 @@ export function markKeyFailed(channel, keyIndex) {
   key.failCount++;
   if (key.failCount >= 3) {
     key.alive = false;
-    log("warn", channel.name, "Key #%d disabled after %d failures", keyIndex, key.failCount);
+    key.disabledAt = Date.now();
+    log("warn", channel.name, "Key #%d disabled after %d failures (auto-recovery in %ds)", keyIndex, key.failCount, KEY_RECOVERY_MS / 1000);
   }
 }
 
@@ -102,6 +119,7 @@ export function markKeySuccess(channel, keyIndex) {
   if (!key) return;
   key.failCount = 0;
   key.alive = true;
+  key.disabledAt = null;
 }
 
 /**

@@ -4,7 +4,7 @@ import { loadConfig, watchConfig } from "./config.mjs";
 import { createChannel } from "./channel.mjs";
 import { createRouter } from "./router.mjs";
 import { createRetryController } from "./retry.mjs";
-import { createUnifiedProxy } from "./proxy.mjs";
+import { createUnifiedProxy, destroyAgentPool } from "./proxy.mjs";
 import { createTunnelManager } from "./tunnel.mjs";
 import { startHealthChecks } from "./health.mjs";
 import { createApiServer } from "./api.mjs";
@@ -72,6 +72,7 @@ async function main() {
     apiServer = createApiServer(router, {
       port: config.server.ui?.port || 3000,
       host: config.server.ui?.host || "127.0.0.1",
+      token: config.server.ui?.token || null,
     });
   }
 
@@ -83,6 +84,7 @@ async function main() {
 
       const newChannels = newConfig.channels.map(createChannel);
       router.update(newChannels, newConfig.routes);
+      retryCtrl.update(newConfig.settings.retry);
 
       // Restart health checks
       stopHealthChecks();
@@ -100,6 +102,7 @@ async function main() {
 
         const newChannels = newConfig.channels.map(createChannel);
         router.update(newChannels, newConfig.routes);
+        retryCtrl.update(newConfig.settings.retry);
         stopHealthChecks();
         stopHealthChecks = startHealthChecks(newChannels);
 
@@ -124,11 +127,22 @@ async function main() {
   console.log("\n   Press Ctrl+C to stop.\n");
 
   // ─── Graceful shutdown ────────────────────────────
+  let shuttingDown = false;
   const shutdown = async (signal) => {
+    if (shuttingDown) return; // Prevent double shutdown
+    shuttingDown = true;
     console.log(`\n🛑 Received ${signal}, shutting down...`);
+
+    // Force exit after 10s if graceful shutdown stalls
+    const forceTimer = setTimeout(() => {
+      console.error("⚠️  Graceful shutdown timed out, forcing exit");
+      process.exit(1);
+    }, 10000);
+    forceTimer.unref(); // Don't prevent exit if we finish in time
 
     stopHealthChecks();
     if (tunnelShutdown) tunnelShutdown();
+    destroyAgentPool();
 
     const closePromises = [];
     closePromises.push(new Promise((r) => proxyServer.close(r)));
@@ -142,6 +156,10 @@ async function main() {
 
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("uncaughtException", (err) => {
+    log("error", "System", "Uncaught exception: %s", err.message);
+    shutdown("uncaughtException");
+  });
 }
 
 main().catch((err) => {
