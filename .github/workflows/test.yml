@@ -23,7 +23,9 @@ jobs:
           node-version: ${{ matrix.node-version }}
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --ignore-scripts
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
 
       - name: Run tests (CI mock)
         run: npm run test:ci
