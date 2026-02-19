@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export default function Logs({ logs, status }) {
+  const { t } = useTranslation();
   const containerRef = useRef(null);
   const autoScrollRef = useRef(true);
 
@@ -26,12 +28,12 @@ export default function Logs({ logs, status }) {
   return (
     <div className="p-6 h-full flex flex-col">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">Logs</h1>
+        <h1 className="text-2xl font-bold">{t('logs.title')}</h1>
         <div className="flex items-center gap-3">
           <span className={`text-xs ${status === 'running' ? 'text-green-400' : 'text-dark-500'}`}>
-            {status === 'running' ? '● Live' : '○ Tunnel stopped'}
+            {status === 'running' ? t('logs.live') : t('logs.tunnelStopped')}
           </span>
-          <span className="text-xs text-dark-500">{logs.length} entries</span>
+          <span className="text-xs text-dark-500">{t('logs.entries', { count: logs.length })}</span>
         </div>
       </div>
 
@@ -43,8 +45,8 @@ export default function Logs({ logs, status }) {
         {logs.length === 0 ? (
           <div className="text-dark-500 text-center py-8">
             {status === 'running'
-              ? 'Waiting for log output...'
-              : 'Start the tunnel to see logs'}
+              ? t('logs.waitingForLogs')
+              : t('logs.startToSeeLogs')}
           </div>
         ) : (
           logs.map((entry, i) => (

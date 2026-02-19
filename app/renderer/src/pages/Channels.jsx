@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 const api = window.electronAPI;
 
@@ -14,18 +15,18 @@ const emptyChannel = {
 };
 
 export default function Channels({ config, setConfig, saveConfig, apiData, status }) {
+  const { t } = useTranslation();
   const [editingIndex, setEditingIndex] = useState(null);
   const [editChannel, setEditChannel] = useState(null);
   const [newKeyValue, setNewKeyValue] = useState('');
-  const [testingKey, setTestingKey] = useState(null); // index of key being tested
-  const [keyTestResult, setKeyTestResult] = useState({}); // { index: { ok, message } }
+  const [testingKey, setTestingKey] = useState(null);
+  const [keyTestResult, setKeyTestResult] = useState({});
 
   const channels = config?.channels || [];
   const isRunning = status === 'running';
 
   function startEdit(index) {
     if (index === -1) {
-      // New channel
       setEditChannel({ ...emptyChannel, keys: [] });
     } else {
       setEditChannel(JSON.parse(JSON.stringify(channels[index])));
@@ -42,9 +43,6 @@ export default function Channels({ config, setConfig, saveConfig, apiData, statu
 
   async function saveChannel() {
     if (!editChannel.name || !editChannel.target) return;
-    if (!editChannel.keys || editChannel.keys.length === 0) {
-      // Allow save with no keys (user might add later)
-    }
 
     const newChannels = [...channels];
     if (editingIndex === -1) {
@@ -62,7 +60,7 @@ export default function Channels({ config, setConfig, saveConfig, apiData, statu
 
   async function deleteChannel(index) {
     const ch = channels[index];
-    if (!confirm(`Delete channel "${ch.name}"?`)) return;
+    if (!confirm(t('channels.deleteConfirm', { name: ch.name }))) return;
     const newChannels = channels.filter((_, i) => i !== index);
     const newConfig = { ...config, channels: newChannels };
     setConfig(newConfig);
@@ -80,7 +78,6 @@ export default function Channels({ config, setConfig, saveConfig, apiData, statu
   function removeKey(ki) {
     const updated = { ...editChannel, keys: editChannel.keys.filter((_, i) => i !== ki) };
     setEditChannel(updated);
-    // Clear test result for removed key
     const newResults = { ...keyTestResult };
     delete newResults[ki];
     setKeyTestResult(newResults);
@@ -98,7 +95,6 @@ export default function Channels({ config, setConfig, saveConfig, apiData, statu
     setTestingKey(null);
   }
 
-  // Get live status for a channel
   function getLiveStatus(name) {
     if (!isRunning) return null;
     return apiData.channels?.find(c => c.name === name) || null;
@@ -107,47 +103,44 @@ export default function Channels({ config, setConfig, saveConfig, apiData, statu
   return (
     <div className="p-6 max-w-5xl">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Channels</h1>
+        <h1 className="text-2xl font-bold">{t('channels.title')}</h1>
         <button
           onClick={() => startEdit(-1)}
           className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
         >
-          <PlusIcon className="w-4 h-4" /> Add Channel
+          <PlusIcon className="w-4 h-4" /> {t('channels.addChannel')}
         </button>
       </div>
 
-      {/* Channel Cards */}
       <div className="space-y-3">
         {channels.length === 0 && editingIndex !== -1 && (
           <div className="bg-dark-800/50 rounded-lg border border-dark-700 p-8 text-center">
             <div className="text-4xl mb-3">📡</div>
-            <div className="text-dark-300 mb-2">No channels configured</div>
-            <div className="text-dark-500 text-sm">Click "Add Channel" to create your first API channel</div>
+            <div className="text-dark-300 mb-2">{t('channels.noChannelsTitle')}</div>
+            <div className="text-dark-500 text-sm">{t('channels.noChannelsDesc')}</div>
           </div>
         )}
 
         {channels.map((ch, i) => {
           const live = getLiveStatus(ch.name);
           const isEditing = editingIndex === i;
+          const dotColor = live?.health === 'healthy' ? 'bg-green-500' :
+                           live?.health === 'unhealthy' ? 'bg-red-500' :
+                           'bg-gray-500';
 
           return (
             <div key={i} className="bg-dark-800 rounded-lg border border-dark-700 overflow-hidden">
-              {/* Channel Header (collapsed view) */}
               <div
                 className="flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-dark-700/30"
                 onClick={() => isEditing ? cancelEdit() : startEdit(i)}
               >
                 <div className="flex items-center gap-4">
-                  <div className={`w-2.5 h-2.5 rounded-full ${
-                    live?.health === 'healthy' ? 'bg-green-500' :
-                    live?.health === 'unhealthy' ? 'bg-red-500' :
-                    'bg-dark-600'
-                  }`} />
+                  <div className={`w-2.5 h-2.5 rounded-full ${dotColor}`} />
                   <div>
                     <div className="font-medium flex items-center gap-2">
                       {ch.name}
                       {ch.fallback && (
-                        <span className="text-xs text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded">fallback</span>
+                        <span className="text-xs text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded">{t('dashboard.fallback')}</span>
                       )}
                     </div>
                     <div className="text-xs text-dark-500 mt-0.5">{ch.target}</div>
@@ -161,7 +154,6 @@ export default function Channels({ config, setConfig, saveConfig, apiData, statu
                 </div>
               </div>
 
-              {/* Expanded Edit Form */}
               {isEditing && editChannel && (
                 <ChannelEditForm
                   channel={editChannel}
@@ -183,11 +175,10 @@ export default function Channels({ config, setConfig, saveConfig, apiData, statu
           );
         })}
 
-        {/* New channel form */}
         {editingIndex === -1 && editChannel && (
           <div className="bg-dark-800 rounded-lg border border-blue-700/50 overflow-hidden">
             <div className="px-5 py-3 border-b border-dark-700 bg-blue-900/10">
-              <span className="text-sm font-medium text-blue-400">New Channel</span>
+              <span className="text-sm font-medium text-blue-400">{t('channels.newChannel')}</span>
             </div>
             <ChannelEditForm
               channel={editChannel}
@@ -218,6 +209,8 @@ function ChannelEditForm({
   onSave, onCancel, onDelete,
   isNew,
 }) {
+  const { t } = useTranslation();
+
   const update = (field, value) => {
     setChannel(prev => ({ ...prev, [field]: value }));
   };
@@ -231,10 +224,9 @@ function ChannelEditForm({
 
   return (
     <div className="p-5 space-y-4 border-t border-dark-700">
-      {/* Basic fields */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs text-dark-400 mb-1.5">Name</label>
+          <label className="block text-xs text-dark-400 mb-1.5">{t('channels.name')}</label>
           <input
             type="text"
             value={channel.name}
@@ -244,7 +236,7 @@ function ChannelEditForm({
           />
         </div>
         <div>
-          <label className="block text-xs text-dark-400 mb-1.5">Target URL</label>
+          <label className="block text-xs text-dark-400 mb-1.5">{t('channels.targetUrl')}</label>
           <input
             type="text"
             value={channel.target}
@@ -257,7 +249,7 @@ function ChannelEditForm({
 
       <div className="grid grid-cols-3 gap-4">
         <div>
-          <label className="block text-xs text-dark-400 mb-1.5">Weight</label>
+          <label className="block text-xs text-dark-400 mb-1.5">{t('channels.weight')}</label>
           <input
             type="number"
             value={channel.weight ?? 10}
@@ -266,14 +258,14 @@ function ChannelEditForm({
           />
         </div>
         <div>
-          <label className="block text-xs text-dark-400 mb-1.5">Key Strategy</label>
+          <label className="block text-xs text-dark-400 mb-1.5">{t('channels.keyStrategy')}</label>
           <select
             value={channel.keyStrategy || 'round-robin'}
             onChange={e => update('keyStrategy', e.target.value)}
             className="w-full bg-dark-900 border border-dark-600 rounded-md px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
           >
-            <option value="round-robin">Round Robin</option>
-            <option value="random">Random</option>
+            <option value="round-robin">{t('channels.roundRobin')}</option>
+            <option value="random">{t('channels.random')}</option>
           </select>
         </div>
         <div className="flex items-end">
@@ -284,12 +276,11 @@ function ChannelEditForm({
               onChange={e => update('fallback', e.target.checked)}
               className="rounded bg-dark-900 border-dark-600"
             />
-            <span className="text-sm text-dark-300">Fallback channel</span>
+            <span className="text-sm text-dark-300">{t('channels.fallbackChannel')}</span>
           </label>
         </div>
       </div>
 
-      {/* Tunnel config */}
       <div>
         <label className="flex items-center gap-2 mb-2 cursor-pointer">
           <input
@@ -298,12 +289,12 @@ function ChannelEditForm({
             onChange={e => updateTunnel('enabled', e.target.checked)}
             className="rounded bg-dark-900 border-dark-600"
           />
-          <span className="text-sm text-dark-300">SSH Tunnel</span>
+          <span className="text-sm text-dark-300">{t('channels.sshTunnel')}</span>
         </label>
         {channel.tunnel?.enabled && (
           <div className="grid grid-cols-2 gap-4 ml-6">
             <div>
-              <label className="block text-xs text-dark-400 mb-1">Local Port</label>
+              <label className="block text-xs text-dark-400 mb-1">{t('channels.localPort')}</label>
               <input
                 type="number"
                 value={channel.tunnel.localPort || ''}
@@ -312,7 +303,7 @@ function ChannelEditForm({
               />
             </div>
             <div>
-              <label className="block text-xs text-dark-400 mb-1">Remote Port</label>
+              <label className="block text-xs text-dark-400 mb-1">{t('channels.remotePort')}</label>
               <input
                 type="number"
                 value={channel.tunnel.remotePort || ''}
@@ -324,9 +315,8 @@ function ChannelEditForm({
         )}
       </div>
 
-      {/* Keys section */}
       <div>
-        <label className="block text-xs text-dark-400 mb-2">API Keys ({channel.keys?.length || 0})</label>
+        <label className="block text-xs text-dark-400 mb-2">{t('channels.apiKeys', { count: channel.keys?.length || 0 })}</label>
         <div className="space-y-2">
           {(channel.keys || []).map((key, ki) => (
             <div key={ki} className="flex items-center gap-2">
@@ -338,7 +328,7 @@ function ChannelEditForm({
                 disabled={testingKey === ki || !channel.target}
                 className="px-3 py-2 text-xs bg-dark-700 hover:bg-dark-600 border border-dark-600 rounded-md text-dark-300 disabled:opacity-50"
               >
-                {testingKey === ki ? '...' : 'Test'}
+                {testingKey === ki ? '...' : t('channels.test')}
               </button>
               <button
                 onClick={() => onRemoveKey(ki)}
@@ -367,13 +357,12 @@ function ChannelEditForm({
               disabled={!newKeyValue.trim()}
               className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 rounded-md text-white disabled:opacity-50"
             >
-              Add Key
+              {t('channels.addKey')}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Action buttons */}
       <div className="flex items-center justify-between pt-2 border-t border-dark-700">
         <div>
           {!isNew && onDelete && (
@@ -381,7 +370,7 @@ function ChannelEditForm({
               onClick={onDelete}
               className="text-sm text-red-400 hover:text-red-300"
             >
-              Delete Channel
+              {t('channels.deleteChannel')}
             </button>
           )}
         </div>
@@ -390,14 +379,14 @@ function ChannelEditForm({
             onClick={onCancel}
             className="px-4 py-2 text-sm text-dark-400 hover:text-dark-200"
           >
-            Cancel
+            {t('channels.cancel')}
           </button>
           <button
             onClick={onSave}
             disabled={!channel.name || !channel.target}
             className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 rounded-md text-white disabled:opacity-50"
           >
-            {isNew ? 'Create Channel' : 'Save Changes'}
+            {isNew ? t('channels.createChannel') : t('channels.saveChanges')}
           </button>
         </div>
       </div>

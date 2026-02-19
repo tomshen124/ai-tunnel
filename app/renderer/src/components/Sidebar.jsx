@@ -1,18 +1,27 @@
 import React from 'react';
-
-const navItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: DashboardIcon },
-  { id: 'channels', label: 'Channels', icon: ChannelsIcon },
-  { id: 'ssh', label: 'SSH Tunnel', icon: SSHIcon },
-  { id: 'logs', label: 'Logs', icon: LogsIcon },
-  { id: 'settings', label: 'Settings', icon: SettingsIcon },
-];
+import { useTranslation } from 'react-i18next';
 
 export default function Sidebar({ currentPage, onNavigate, tunnelStatus }) {
+  const { t, i18n } = useTranslation();
+
+  const navItems = [
+    { id: 'dashboard', label: t('sidebar.dashboard'), icon: DashboardIcon },
+    { id: 'channels', label: t('sidebar.channels'), icon: ChannelsIcon },
+    { id: 'ssh', label: t('sidebar.ssh'), icon: SSHIcon },
+    { id: 'logs', label: t('sidebar.logs'), icon: LogsIcon },
+    { id: 'settings', label: t('sidebar.settings'), icon: SettingsIcon },
+  ];
+
   const statusColor = tunnelStatus === 'running' ? 'bg-green-500' :
                       tunnelStatus === 'starting' ? 'bg-yellow-500' :
                       tunnelStatus === 'error' ? 'bg-red-500' :
                       'bg-dark-600';
+
+  function toggleLanguage() {
+    const next = i18n.language === 'en' ? 'zh' : 'en';
+    i18n.changeLanguage(next);
+    localStorage.setItem('ai-tunnel-lang', next);
+  }
 
   return (
     <aside className="w-56 bg-dark-950 border-r border-dark-800 flex flex-col">
@@ -43,8 +52,15 @@ export default function Sidebar({ currentPage, onNavigate, tunnelStatus }) {
         ))}
       </nav>
 
-      {/* Status */}
-      <div className="p-4 border-t border-dark-800">
+      {/* Language + Status */}
+      <div className="p-4 border-t border-dark-800 space-y-3">
+        <button
+          onClick={toggleLanguage}
+          className="flex items-center gap-2 text-xs text-dark-400 hover:text-dark-200 transition-colors"
+        >
+          <span>🌐</span>
+          <span>{i18n.language === 'en' ? 'EN / 中文' : '中文 / EN'}</span>
+        </button>
         <div className="flex items-center gap-2 text-xs text-dark-500">
           <div className={`w-2 h-2 rounded-full ${statusColor} ${tunnelStatus === 'running' ? 'animate-pulse-green' : ''}`} />
           <span className="capitalize">{tunnelStatus}</span>

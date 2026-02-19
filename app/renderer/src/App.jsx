@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
 import Channels from './pages/Channels';
@@ -11,6 +12,7 @@ import { useTunnel } from './hooks/useTunnel';
 const api = window.electronAPI;
 
 export default function App() {
+  const { t } = useTranslation();
   const [page, setPage] = useState('dashboard');
   const { config, setConfig, saveConfig, loading, error: configError } = useConfig();
   const { status, logs, start, stop } = useTunnel();
@@ -67,7 +69,7 @@ export default function App() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-dark-900">
-        <div className="text-dark-400 text-lg">Loading configuration...</div>
+        <div className="text-dark-400 text-lg">{t('common.loading')}</div>
       </div>
     );
   }
@@ -78,7 +80,7 @@ export default function App() {
       <main className="flex-1 overflow-y-auto">
         {configError && (
           <div className="bg-red-900/30 border border-red-700 text-red-300 px-4 py-2 text-sm">
-            Config error: {configError}
+            {t('common.configError', { error: configError })}
           </div>
         )}
         {renderPage()}

@@ -1,6 +1,8 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 export default function Dashboard({ config, status, apiData, onStart, onStop }) {
+  const { t } = useTranslation();
   const isRunning = status === 'running';
   const isStarting = status === 'starting';
   const channelCount = config?.channels?.length || 0;
@@ -11,7 +13,7 @@ export default function Dashboard({ config, status, apiData, onStart, onStop }) 
 
   return (
     <div className="p-6 max-w-5xl">
-      <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
+      <h1 className="text-2xl font-bold mb-6">{t('dashboard.title')}</h1>
 
       {/* Big Start/Stop Button */}
       <div className="flex items-center gap-6 mb-8">
@@ -33,17 +35,17 @@ export default function Dashboard({ config, status, apiData, onStart, onStop }) 
           {isRunning ? (
             <div className="flex flex-col items-center">
               <StopIcon className="w-8 h-8 mb-1" />
-              <span className="text-xs">Stop</span>
+              <span className="text-xs">{t('dashboard.stop')}</span>
             </div>
           ) : isStarting ? (
             <div className="flex flex-col items-center">
               <SpinnerIcon className="w-8 h-8 mb-1 animate-spin" />
-              <span className="text-xs">Starting</span>
+              <span className="text-xs">{t('dashboard.starting')}</span>
             </div>
           ) : (
             <div className="flex flex-col items-center">
               <PlayIcon className="w-8 h-8 mb-1" />
-              <span className="text-xs">Start</span>
+              <span className="text-xs">{t('dashboard.start')}</span>
             </div>
           )}
           {isRunning && (
@@ -53,14 +55,14 @@ export default function Dashboard({ config, status, apiData, onStart, onStop }) 
 
         <div>
           <div className="text-xl font-semibold">
-            {isRunning ? 'Tunnel is Running' : isStarting ? 'Starting Tunnel...' : 'Tunnel is Stopped'}
+            {isRunning ? t('dashboard.tunnelRunning') : isStarting ? t('dashboard.tunnelStarting') : t('dashboard.tunnelStopped')}
           </div>
           <div className="text-dark-400 text-sm mt-1">
             {isRunning && apiData.status
-              ? `Uptime: ${formatUptime(apiData.status.uptime)} · Port ${config?.server?.port || 9000}`
+              ? t('dashboard.uptime', { uptime: formatUptime(apiData.status.uptime), port: config?.server?.port || 9000 })
               : isRunning
-                ? `Listening on port ${config?.server?.port || 9000}`
-                : 'Click the button to start the tunnel service'
+                ? t('dashboard.listeningOn', { port: config?.server?.port || 9000 })
+                : t('dashboard.clickToStart')
             }
           </div>
         </div>
@@ -69,19 +71,19 @@ export default function Dashboard({ config, status, apiData, onStart, onStop }) 
       {/* Stats Grid */}
       <div className="grid grid-cols-4 gap-4 mb-8">
         <StatCard
-          label="Channels"
+          label={t('dashboard.channels')}
           value={isRunning ? `${healthy}/${apiChannels.length}` : `${channelCount}`}
-          sub={isRunning ? 'healthy' : 'configured'}
+          sub={isRunning ? t('dashboard.healthy') : t('dashboard.configured')}
           color="blue"
         />
         <StatCard
-          label="Total Requests"
+          label={t('dashboard.totalRequests')}
           value={stats ? formatNumber(stats.totalRequests) : '—'}
-          sub={isRunning ? 'since start' : 'not running'}
+          sub={isRunning ? t('dashboard.sinceStart') : t('dashboard.notRunning')}
           color="cyan"
         />
         <StatCard
-          label="Success Rate"
+          label={t('dashboard.successRate')}
           value={stats && stats.totalRequests > 0
             ? `${((stats.totalSuccess / stats.totalRequests) * 100).toFixed(1)}%`
             : '—'}
@@ -89,9 +91,9 @@ export default function Dashboard({ config, status, apiData, onStart, onStop }) 
           color="emerald"
         />
         <StatCard
-          label="Failures"
+          label={t('dashboard.failures')}
           value={stats ? formatNumber(stats.totalFail) : '—'}
-          sub={unhealthy > 0 ? `${unhealthy} unhealthy channels` : 'all good'}
+          sub={unhealthy > 0 ? t('dashboard.unhealthyChannels', { count: unhealthy }) : t('dashboard.allGood')}
           color={unhealthy > 0 ? 'red' : 'emerald'}
         />
       </div>
@@ -99,18 +101,18 @@ export default function Dashboard({ config, status, apiData, onStart, onStop }) 
       {/* Channel Status Table */}
       {isRunning && apiChannels.length > 0 && (
         <div>
-          <h2 className="text-lg font-semibold mb-3">Channel Status</h2>
+          <h2 className="text-lg font-semibold mb-3">{t('dashboard.channelStatus')}</h2>
           <div className="bg-dark-800 rounded-lg border border-dark-700 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-dark-400 text-xs uppercase border-b border-dark-700">
-                  <th className="text-left px-4 py-3">Channel</th>
-                  <th className="text-left px-4 py-3">Health</th>
-                  <th className="text-right px-4 py-3">Latency</th>
-                  <th className="text-right px-4 py-3">Requests</th>
-                  <th className="text-right px-4 py-3">Success Rate</th>
-                  <th className="text-center px-4 py-3">Keys</th>
-                  <th className="text-center px-4 py-3">Enabled</th>
+                  <th className="text-left px-4 py-3">{t('dashboard.channel')}</th>
+                  <th className="text-left px-4 py-3">{t('dashboard.health')}</th>
+                  <th className="text-right px-4 py-3">{t('dashboard.latency')}</th>
+                  <th className="text-right px-4 py-3">{t('dashboard.requests')}</th>
+                  <th className="text-right px-4 py-3">{t('dashboard.successRate')}</th>
+                  <th className="text-center px-4 py-3">{t('dashboard.keys')}</th>
+                  <th className="text-center px-4 py-3">{t('dashboard.enabled')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -118,7 +120,7 @@ export default function Dashboard({ config, status, apiData, onStart, onStop }) 
                   <tr key={ch.name} className="border-b border-dark-700/50 hover:bg-dark-700/30">
                     <td className="px-4 py-3 font-medium">
                       {ch.name}
-                      {ch.fallback && <span className="ml-2 text-xs text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded">fallback</span>}
+                      {ch.fallback && <span className="ml-2 text-xs text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded">{t('dashboard.fallback')}</span>}
                     </td>
                     <td className="px-4 py-3">
                       <HealthBadge health={ch.health} />
@@ -152,8 +154,8 @@ export default function Dashboard({ config, status, apiData, onStart, onStop }) 
       {!isRunning && channelCount === 0 && (
         <div className="bg-dark-800/50 rounded-lg border border-dark-700 p-8 text-center">
           <div className="text-4xl mb-3">🚀</div>
-          <div className="text-dark-300 mb-2">No channels configured yet</div>
-          <div className="text-dark-500 text-sm">Go to the Channels page to add your first API channel</div>
+          <div className="text-dark-300 mb-2">{t('dashboard.noChannelsTitle')}</div>
+          <div className="text-dark-500 text-sm">{t('dashboard.noChannelsDesc')}</div>
         </div>
       )}
     </div>
@@ -177,18 +179,18 @@ function StatCard({ label, value, sub, color }) {
 }
 
 function HealthBadge({ health }) {
+  const { t } = useTranslation();
   const styles = {
     healthy: 'bg-green-500/10 text-green-400 border-green-800/50',
     unhealthy: 'bg-red-500/10 text-red-400 border-red-800/50',
     unknown: 'bg-dark-700 text-dark-400 border-dark-600',
   };
+  const dotColor = health === 'healthy' ? 'bg-green-400' :
+                   health === 'unhealthy' ? 'bg-red-400' : 'bg-gray-500';
   return (
     <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs border ${styles[health] || styles.unknown}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${
-        health === 'healthy' ? 'bg-green-400' :
-        health === 'unhealthy' ? 'bg-red-400' : 'bg-dark-500'
-      }`} />
-      {health || 'unknown'}
+      <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
+      {t(`common.${health || 'unknown'}`)}
     </span>
   );
 }
