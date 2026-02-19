@@ -33,6 +33,14 @@ export function getLogLevel() {
   return Object.keys(LEVELS).find((k) => LEVELS[k] === currentLevel) || "info";
 }
 
+// Redact API keys that might accidentally appear in log messages.
+// Matches patterns like sk-xxx...xxx, key-xxx, Bearer xxx
+const KEY_PATTERN = /\b(sk-|key-|Bearer\s+)([a-zA-Z0-9]{4})[a-zA-Z0-9]{8,}([a-zA-Z0-9]{4})\b/g;
+
+function redactKeys(str) {
+  return str.replace(KEY_PATTERN, "$1$2****$3");
+}
+
 export function log(level, tag, msg, ...args) {
   if ((LEVELS[level] ?? 0) < currentLevel) return;
 
@@ -46,6 +54,9 @@ export function log(level, tag, msg, ...args) {
   for (const arg of args) {
     formatted = formatted.replace(/%[sd]/, String(arg));
   }
+
+  // Redact any API keys that might have leaked into the message
+  formatted = redactKeys(formatted);
 
   console.log(`${prefix} ${formatted}`);
 

@@ -8,7 +8,10 @@ import { homedir } from "os";
 import { log } from "./logger.mjs";
 
 function expandHome(p) {
-  if (p.startsWith("~")) return resolve(homedir(), p.slice(2));
+  if (p === "~") return homedir();
+  if (p.startsWith("~/") || p.startsWith("~\\")) {
+    return resolve(homedir(), p.slice(2));
+  }
   return resolve(p);
 }
 

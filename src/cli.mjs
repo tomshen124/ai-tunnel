@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 // src/cli.mjs - CLI entry point (v2)
 
-import { resolve } from "path";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
 import { existsSync, copyFileSync } from "fs";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const args = process.argv.slice(2);
 const command = args[0] || "start";
@@ -17,11 +20,7 @@ switch (command) {
     if (existsSync(dest)) {
       console.log("⚠️  tunnel.config.yaml already exists. Skipping.");
     } else {
-      const src = resolve(
-        import.meta.dirname,
-        "..",
-        "tunnel.config.example.yaml"
-      );
+      const src = resolve(__dirname, "..", "tunnel.config.example.yaml");
       copyFileSync(src, dest);
       console.log("✅ Created tunnel.config.yaml — edit it with your settings.");
     }
@@ -54,11 +53,23 @@ switch (command) {
 
   case "stop":
     try {
-      // Send SIGTERM to the running process
+      // Send SIGTERM to the running process (cross-platform)
       console.log("🛑 Sending stop signal...");
-      // Try to find the process
       const { execSync } = await import("child_process");
-      const pid = execSync("pgrep -f 'node.*index.mjs'", { encoding: "utf-8" }).trim();
+      const isWin = process.platform === "win32";
+      let pid;
+      if (isWin) {
+        // Windows: use wmic/tasklist to find node process running index.mjs
+        const out = execSync(
+          'wmic process where "CommandLine like \'%index.mjs%\' and Name=\'node.exe\'" get ProcessId /format:list',
+          { encoding: "utf-8" }
+        ).trim();
+        const match = out.match(/ProcessId=(\d+)/);
+        pid = match ? match[1] : null;
+      } else {
+        // Unix (Linux/macOS): use pgrep
+        pid = execSync("pgrep -f 'node.*index.mjs'", { encoding: "utf-8" }).trim();
+      }
       if (pid) {
         process.kill(parseInt(pid), "SIGTERM");
         console.log("✅ Stop signal sent to PID %s", pid);

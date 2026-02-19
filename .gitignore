@@ -1,4 +1,28 @@
+# Dependencies
 node_modules/
+
+# Config files with secrets (only keep the example)
 tunnel.config.yaml
+tunnel.config.*.yaml
+!tunnel.config.example.yaml
+
+# Test generated configs
+test/.test.*.yaml
+
+# Environment files
+.env
+.env.*
+
+# Logs
 *.log
+
+# OS files
 .DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
