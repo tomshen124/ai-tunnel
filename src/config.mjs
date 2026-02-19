@@ -130,11 +130,18 @@ function buildDefaultRoutes(channels) {
 export function watchConfig(configPath, onChange) {
   const path = configPath || resolve(process.cwd(), DEFAULT_CONFIG_NAME);
   let debounceTimer = null;
+  let lastReloadTime = 0;
+  const MIN_RELOAD_INTERVAL = 1000; // Minimum ms between actual reloads
 
-  watchFile(path, { interval: 1000 }, () => {
-    // Debounce rapid changes
+  watchFile(path, { interval: 2000 }, () => {
+    // Debounce rapid FS events (OS may fire multiple for a single write)
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
+      const now = Date.now();
+      if (now - lastReloadTime < MIN_RELOAD_INTERVAL) {
+        return; // Skip if we just reloaded
+      }
+      lastReloadTime = now;
       log("info", "Config", "File changed, reloading...");
       try {
         const newConfig = loadConfig(path);
@@ -143,7 +150,7 @@ export function watchConfig(configPath, onChange) {
       } catch (e) {
         log("error", "Config", "Reload failed: %s", e.message);
       }
-    }, 500);
+    }, 300);
   });
 
   return () => {

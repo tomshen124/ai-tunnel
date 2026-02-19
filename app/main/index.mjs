@@ -254,7 +254,25 @@ ipcMain.handle('config:load', async () => {
 
 ipcMain.handle('config:save', async (_event, config) => {
   try {
+    // Check if SSH config changed while tunnel is running
+    const oldConfig = loadConfig();
+    const sshChanged = tunnelStatus === 'running' &&
+      JSON.stringify(oldConfig.ssh || {}) !== JSON.stringify(config.ssh || {});
+
     saveConfig(config);
+
+    // Auto-restart tunnel if SSH config changed
+    if (sshChanged) {
+      sendToRenderer('tunnel:log', {
+        level: 'info',
+        message: 'SSH config changed, restarting tunnel...',
+        time: new Date().toISOString(),
+      });
+      stopTunnel();
+      // Brief delay to allow cleanup before restarting
+      setTimeout(() => startTunnel(), 500);
+    }
+
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };
