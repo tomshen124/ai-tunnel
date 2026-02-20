@@ -37,7 +37,10 @@
     "openai",
     "ai"
   ],
-  "author": "tomshen124",
+  "author": {
+    "name": "tomshen124",
+    "email": "tomshen124@users.noreply.github.com"
+  },
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
