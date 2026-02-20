@@ -53,7 +53,8 @@
     "fallbackChannel": "备用通道",
     "sshTunnel": "SSH 隧道",
     "localPort": "本地端口",
-    "remotePort": "远程端口",
+    "remotePort": "VPS 监听端口",
+    "remotePortHint": "VPS 上监听此端口，通过 SSH 隧道转发到本地代理",
     "apiKeys": "API Key ({{count}})",
     "test": "测试",
     "addKey": "添加 Key",
@@ -82,9 +83,10 @@
     "saveFailed": "保存失败",
     "tunnelPortMappings": "隧道端口映射",
     "channel": "通道",
-    "localPort": "本地端口",
-    "remotePort": "远程端口",
-    "portMappingsNote": "端口映射在通道页面的各通道设置中配置。",
+    "localPort": "本地代理",
+    "localProxy": "本地代理",
+    "remotePort": "VPS 端口",
+    "portMappingsNote": "VPS 上的流量通过 SSH 隧道转发到本地代理。映射在通道页面中配置。",
     "noTunnelChannels": "暂无通道启用 SSH 隧道。在通道设置中开启隧道后，端口映射会显示在这里。"
   },
   "logs": {

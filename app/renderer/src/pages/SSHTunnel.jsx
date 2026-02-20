@@ -161,18 +161,18 @@ export default function SSHTunnel({ config, setConfig, saveConfig }) {
               <thead>
                 <tr className="text-dark-400 text-xs uppercase border-b border-dark-700">
                   <th className="text-left px-4 py-3">{t('ssh.channel')}</th>
-                  <th className="text-center px-4 py-3">{t('ssh.localPort')}</th>
-                  <th className="text-center px-4 py-3"></th>
                   <th className="text-center px-4 py-3">{t('ssh.remotePort')}</th>
+                  <th className="text-center px-4 py-3"></th>
+                  <th className="text-center px-4 py-3">{t('ssh.localProxy')}</th>
                 </tr>
               </thead>
               <tbody>
                 {tunnelChannels.map((ch, i) => (
                   <tr key={i} className="border-b border-dark-700/50">
                     <td className="px-4 py-3 font-medium">{ch.name}</td>
-                    <td className="px-4 py-3 text-center text-dark-300">:{ch.tunnel.localPort}</td>
+                    <td className="px-4 py-3 text-center text-dark-300">VPS:{ch.tunnel.remotePort}</td>
                     <td className="px-4 py-3 text-center text-dark-500">→</td>
-                    <td className="px-4 py-3 text-center text-dark-300">:{ch.tunnel.remotePort}</td>
+                    <td className="px-4 py-3 text-center text-dark-300">proxy:{config?.server?.port || 9000}</td>
                   </tr>
                 ))}
               </tbody>

@@ -10,7 +10,7 @@ const emptyChannel = {
   keyStrategy: 'round-robin',
   weight: 10,
   fallback: false,
-  tunnel: { enabled: false, localPort: 8080, remotePort: 9090 },
+  tunnel: { enabled: false, remotePort: 9090 },
   healthCheck: { path: '/v1/models', intervalMs: 60000, timeoutMs: 5000 },
 };
 
@@ -292,17 +292,8 @@ function ChannelEditForm({
           <span className="text-sm text-dark-300">{t('channels.sshTunnel')}</span>
         </label>
         {channel.tunnel?.enabled && (
-          <div className="grid grid-cols-2 gap-4 ml-6">
-            <div>
-              <label className="block text-xs text-dark-400 mb-1">{t('channels.localPort')}</label>
-              <input
-                type="number"
-                value={channel.tunnel.localPort || ''}
-                onChange={e => updateTunnel('localPort', parseInt(e.target.value) || 0)}
-                className="w-full bg-dark-900 border border-dark-600 rounded-md px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-              />
-            </div>
-            <div>
+          <div className="ml-6">
+            <div className="max-w-xs">
               <label className="block text-xs text-dark-400 mb-1">{t('channels.remotePort')}</label>
               <input
                 type="number"
@@ -310,6 +301,7 @@ function ChannelEditForm({
                 onChange={e => updateTunnel('remotePort', parseInt(e.target.value) || 0)}
                 className="w-full bg-dark-900 border border-dark-600 rounded-md px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
               />
+              <p className="text-xs text-dark-500 mt-1">{t('channels.remotePortHint')}</p>
             </div>
           </div>
         )}

@@ -39,12 +39,9 @@ export function startHealthChecks(channels) {
 function checkChannel(channel, timeoutMs) {
   const start = Date.now();
 
-  let targetUrl;
-  if (channel.tunnel?.enabled && channel.tunnel.localPort) {
-    targetUrl = new URL(`http://127.0.0.1:${channel.tunnel.localPort}`);
-  } else {
-    targetUrl = new URL(channel.target);
-  }
+  // Always health-check against the real target URL.
+  // SSH tunnels are inbound-only (VPS → local); health checks go outbound.
+  const targetUrl = new URL(channel.target);
 
   const isHttps = targetUrl.protocol === "https:";
   const requestFn = isHttps ? httpsRequest : httpRequest;

@@ -296,13 +296,10 @@ function readRequestBody(req) {
 
 function proxyRequest(req, res, body, channel, key, reqId, startTime, clientGone) {
   return new Promise((resolve, reject) => {
-    // Resolve target URL (tunnel or direct)
-    let targetUrl;
-    if (channel.tunnel?.enabled && channel.tunnel.localPort) {
-      targetUrl = cachedURL(`http://127.0.0.1:${channel.tunnel.localPort}`);
-    } else {
-      targetUrl = cachedURL(channel.target);
-    }
+    // Always connect directly to the target URL.
+    // SSH tunnels are inbound (VPS → local); the proxy itself goes outbound
+    // to the real API endpoint over the local network / residential IP.
+    const targetUrl = cachedURL(channel.target);
 
     const isHttps = targetUrl.protocol === "https:";
     const requestFn = isHttps ? httpsRequest : httpRequest;

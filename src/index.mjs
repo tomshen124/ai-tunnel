@@ -40,11 +40,14 @@ async function main() {
 
   if (config.ssh && tunnelChannels.length > 0) {
     // Build a tunnel config compatible with existing tunnel.mjs
+    // All inbound tunnel traffic is forwarded to the unified proxy port
+    // so that it goes through the routing engine (key pool, failover, etc.)
+    const proxyPort = config.server.port;
     const tunnelConfig = {
       ssh: config.ssh,
       sites: tunnelChannels.map((ch) => ({
         name: ch.name,
-        localPort: ch.tunnel.localPort,
+        localPort: proxyPort,          // forward to proxy, not a per-channel port
         remotePort: ch.tunnel.remotePort,
       })),
       settings: {

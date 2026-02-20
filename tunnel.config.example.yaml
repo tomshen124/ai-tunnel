@@ -5,7 +5,7 @@
 # 服务配置
 # ═══════════════════════════════════════
 server:
-  # 统一入口端口（VPS 上的应用连这里）
+  # 统一代理端口（本地和 VPS 的请求都走这里）
   port: 9000
   host: "127.0.0.1"
 
@@ -16,7 +16,11 @@ server:
     host: "127.0.0.1"
 
 # ═══════════════════════════════════════
-# SSH 连接（可选，不用隧道时删除此段）
+# SSH 反向隧道（可选，不用隧道时删除此段）
+#
+# 工作原理:
+#   VPS 上的应用 → VPS:remotePort → SSH 反向隧道 → 本地 proxy:9000 → 直连 API
+#   本地 Mac/PC 用住宅 IP 访问 API，绕过 CF 对 VPS IP 的封锁
 # ═══════════════════════════════════════
 ssh:
   host: "YOUR_VPS_IP"
@@ -38,9 +42,8 @@ channels:
     keyStrategy: "round-robin"     # round-robin | random
     weight: 10                     # 权重越高优先级越高
     tunnel:
-      enabled: true
-      localPort: 8080
-      remotePort: 9090
+      enabled: true                # 在 VPS 上开反向隧道入口
+      remotePort: 9090             # VPS 上监听的端口（应用连这个）
     healthCheck:
       path: "/v1/models"
       intervalMs: 60000
@@ -54,7 +57,6 @@ channels:
     fallback: true                 # 备用通道
     tunnel:
       enabled: true
-      localPort: 8081
       remotePort: 9091
 
 # ═══════════════════════════════════════

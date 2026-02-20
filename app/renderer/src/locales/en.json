@@ -53,7 +53,8 @@
     "fallbackChannel": "Fallback channel",
     "sshTunnel": "SSH Tunnel",
     "localPort": "Local Port",
-    "remotePort": "Remote Port",
+    "remotePort": "VPS Listen Port",
+    "remotePortHint": "Port on VPS that forwards traffic through the SSH tunnel to this proxy",
     "apiKeys": "API Keys ({{count}})",
     "test": "Test",
     "addKey": "Add Key",
@@ -82,9 +83,10 @@
     "saveFailed": "Save failed",
     "tunnelPortMappings": "Tunnel Port Mappings",
     "channel": "Channel",
-    "localPort": "Local Port",
-    "remotePort": "Remote Port",
-    "portMappingsNote": "Port mappings are configured per-channel in the Channels page.",
+    "localPort": "Local Proxy",
+    "localProxy": "Local Proxy",
+    "remotePort": "VPS Port",
+    "portMappingsNote": "VPS traffic is forwarded through SSH tunnel to the local proxy. Mappings are configured per-channel.",
     "noTunnelChannels": "No channels have SSH tunnel enabled. Enable tunnel in channel settings to see port mappings here."
   },
   "logs": {
