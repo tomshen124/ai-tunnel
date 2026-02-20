@@ -205,6 +205,11 @@ export function createTunnelManager(config) {
       reconnectTimer = null;
     }
     if (conn) {
+      // Give SSH 2s to close gracefully, then force destroy
+      const forceTimer = setTimeout(() => {
+        if (conn) { try { conn.destroy(); } catch {} }
+      }, 2000);
+      conn.on("close", () => clearTimeout(forceTimer));
       conn.end();
       conn = null;
     }

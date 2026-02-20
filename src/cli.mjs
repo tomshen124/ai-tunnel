@@ -124,9 +124,9 @@ switch (command) {
       process.exit(0);
     }
 
-    // Wait for process to exit (up to 5s)
+    // Wait for process to exit (up to 8s)
     let gone = false;
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 80; i++) {
       await new Promise((r) => setTimeout(r, 100));
       try {
         process.kill(pid, 0);
