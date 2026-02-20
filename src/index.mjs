@@ -10,8 +10,19 @@ import { startHealthChecks } from "./health.mjs";
 import { createApiServer } from "./api.mjs";
 import { log, setLogLevel, subscribe } from "./logger.mjs";
 
+import { writeFileSync, unlinkSync, mkdirSync, existsSync } from "fs";
+import { resolve } from "path";
+import { homedir } from "os";
+
+const DATA_DIR = resolve(homedir(), ".ai-tunnel");
+const PID_FILE = resolve(DATA_DIR, "ai-tunnel.pid");
+
 async function main() {
   console.log("\n🚇 AI-Tunnel v2\n");
+
+  // Write PID file so CLI can find us
+  if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
+  writeFileSync(PID_FILE, String(process.pid), "utf-8");
 
   // ─── Load config ───────────────────────────────────
   const config = loadConfig(process.env.TUNNEL_CONFIG || undefined);
@@ -152,6 +163,9 @@ async function main() {
     if (apiServer) closePromises.push(new Promise((r) => apiServer.close(r)));
 
     await Promise.all(closePromises);
+
+    // Clean up PID file
+    try { unlinkSync(PID_FILE); } catch { /* ignore */ }
 
     log("info", "System", "All connections closed. Goodbye!");
     process.exit(0);
