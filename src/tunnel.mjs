@@ -84,14 +84,40 @@ export function createTunnelManager(config) {
       settled = true;
       log("info", "SSH", "Reconnected to %s@%s:%d", ssh.username || "root", ssh.host, ssh.port || 22);
 
-      for (const site of sites) {
-        conn.forwardIn("127.0.0.1", site.remotePort, (err) => {
-          if (err) {
-            log("error", site.name, "Failed to forward port %d: %s", site.remotePort, err.message);
-          } else {
-            log("info", site.name, "Remote :%d → local :%d (reconnected)", site.remotePort, site.localPort);
-          }
-        });
+      // First cancel any stale forwardIn bindings, then re-establish
+      let pending = sites.length;
+      if (pending === 0) return;
+
+      // Kill any stale sshd processes holding our ports on the remote server
+      const ports = sites.map(s => s.remotePort);
+      const killCmd = ports.map(p =>
+        `fuser -k ${p}/tcp 2>/dev/null; sleep 0.5`
+      ).join("; ");
+
+      conn.exec(killCmd, (execErr, stream) => {
+        if (execErr) {
+          log("warn", "SSH", "Could not clean stale ports: %s", execErr.message);
+        }
+        if (stream) {
+          stream.on("close", () => {
+            forwardAllSites();
+          });
+          stream.resume(); // drain the stream
+        } else {
+          forwardAllSites();
+        }
+      });
+
+      function forwardAllSites() {
+        for (const site of sites) {
+          conn.forwardIn("127.0.0.1", site.remotePort, (err) => {
+            if (err) {
+              log("error", site.name, "Failed to forward port %d: %s", site.remotePort, err.message);
+            } else {
+              log("info", site.name, "Remote :%d → local :%d (reconnected)", site.remotePort, site.localPort);
+            }
+          });
+        }
       }
     });
 
