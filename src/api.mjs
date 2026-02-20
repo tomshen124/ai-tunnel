@@ -135,7 +135,7 @@ function handleStatus(router, res) {
     status: "running",
     uptime: Math.floor(process.uptime()),
     channels: { healthy, total: channels.length },
-    version: "2.2.0",
+    version: "2.3.0",
   });
 }
 

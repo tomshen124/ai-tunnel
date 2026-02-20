@@ -231,13 +231,15 @@ switch (command) {
   }
 
   case "init": {
-    const dest = resolve(process.cwd(), "tunnel.config.yaml");
+    ensureDataDir();
+    const dest = resolve(DATA_DIR, "tunnel.config.yaml");
     if (existsSync(dest)) {
-      console.log("⚠️  tunnel.config.yaml already exists. Skipping.");
+      console.log(`⚠️  Config already exists: ${dest}`);
     } else {
       const src = resolve(__dirname, "..", "tunnel.config.example.yaml");
       copyFileSync(src, dest);
-      console.log("✅ Created tunnel.config.yaml — edit it with your settings.");
+      console.log(`✅ Created config: ${dest}`);
+      console.log(`   Edit it, then run 'ai-tunnel start'`);
     }
     break;
   }

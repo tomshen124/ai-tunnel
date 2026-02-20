@@ -2,10 +2,12 @@
 
 import { readFileSync, existsSync, watchFile, unwatchFile } from "fs";
 import { resolve } from "path";
+import { homedir } from "os";
 import yaml from "js-yaml";
 import { log } from "./logger.mjs";
 
 const DEFAULT_CONFIG_NAME = "tunnel.config.yaml";
+const DATA_DIR = resolve(homedir(), ".ai-tunnel");
 
 const DEFAULT_SETTINGS = {
   reconnectInterval: 5000,
@@ -35,7 +37,21 @@ const DEFAULT_SERVER = {
  * Supports both v1 (sites) and v2 (channels) formats.
  */
 export function loadConfig(configPath) {
-  const path = configPath || resolve(process.cwd(), DEFAULT_CONFIG_NAME);
+  // Priority: explicit path > ~/.ai-tunnel/ > cwd
+  let path = configPath;
+  if (!path) {
+    const homePath = resolve(DATA_DIR, DEFAULT_CONFIG_NAME);
+    const cwdPath = resolve(process.cwd(), DEFAULT_CONFIG_NAME);
+    if (existsSync(homePath)) {
+      path = homePath;
+    } else if (existsSync(cwdPath)) {
+      path = cwdPath;
+    } else {
+      throw new Error(
+        `Config file not found.\nRun 'ai-tunnel init' to create one at ${homePath}`
+      );
+    }
+  }
 
   if (!existsSync(path)) {
     throw new Error(
