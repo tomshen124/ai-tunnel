@@ -1,6 +1,6 @@
 {
   "name": "@tomshen124/ai-tunnel",
-  "version": "2.3.1",
+  "version": "3.0.0",
   "description": "Cross-platform API tunnel proxy — multi-channel smart routing, automatic failover, web UI",
   "type": "module",
   "main": "src/index.mjs",
@@ -17,12 +17,7 @@
     "start": "node src/index.mjs",
     "dev": "node --watch src/index.mjs",
     "test": "node test/run.mjs",
-    "test:ci": "node test/run-ci.mjs",
-    "electron": "npm run electron:build && electron app/main/index.mjs",
-    "electron:dev": "concurrently \"npm run vite:dev\" \"wait-on http://localhost:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron app/main/index.mjs\"",
-    "electron:build": "vite build --config app/renderer/vite.config.mjs",
-    "electron:dist": "npm run electron:build && electron-builder",
-    "vite:dev": "vite --config app/renderer/vite.config.mjs"
+    "test:ci": "node test/run-ci.mjs"
   },
   "keywords": [
     "api",
@@ -57,20 +52,5 @@
     "js-yaml": "^4.1.0",
     "ssh2": "^1.16.0"
   },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.4",
-    "autoprefixer": "^10.4.20",
-    "concurrently": "^9.1.0",
-    "cross-env": "^7.0.3",
-    "electron": "^33.0.0",
-    "electron-builder": "^25.1.8",
-    "i18next": "^25.8.11",
-    "postcss": "^8.4.49",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-i18next": "^16.5.4",
-    "tailwindcss": "^3.4.17",
-    "vite": "^6.0.0",
-    "wait-on": "^8.0.1"
-  }
+  "devDependencies": {}
 }

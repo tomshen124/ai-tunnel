@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to release (e.g. v2.1.0)"
+        description: "Tag to release (e.g. v3.0.0)"
         required: true
         type: string
 
@@ -86,59 +86,3 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(inputs.tag || github.ref_name, '-') }}
-
-  electron:
-    needs: release
-    name: Build Electron (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Sync version from tag
-        shell: bash
-        run: |
-          TAG="${{ inputs.tag || github.ref_name }}"
-          VERSION="${TAG#v}"
-          echo "Syncing package.json version to $VERSION"
-          npm version "$VERSION" --no-git-tag-version --allow-same-version
-
-      - name: Build Electron dist
-        run: npm run electron:build && npx electron-builder --publish never
-
-      - name: Upload artifacts (dist-electron)
-        uses: actions/upload-artifact@v4
-        with:
-          name: ai-tunnel-${{ matrix.os }}
-          path: |
-            dist-electron/**
-            !dist-electron/**/.cache/**
-
-      - name: Upload assets to GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ inputs.tag || github.ref_name }}
-          files: |
-            dist-electron/*.dmg
-            dist-electron/*.zip
-            dist-electron/*.exe
-            dist-electron/*.AppImage
-            dist-electron/*.deb
-            dist-electron/*.rpm
-            dist-electron/*.snap
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
