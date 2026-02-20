@@ -240,11 +240,19 @@ function startTunnel() {
 
 function stopTunnel() {
   if (!tunnelProcess) return;
-  tunnelProcess.kill('SIGTERM');
+
+  const proc = tunnelProcess;
   tunnelProcess = null;
   tunnelStatus = 'stopped';
   updateTrayMenu();
   sendToRenderer('tunnel:status', { status: tunnelStatus });
+
+  // Graceful shutdown: SIGTERM first, force-kill after 3s
+  proc.kill('SIGTERM');
+  const forceKill = setTimeout(() => {
+    try { proc.kill('SIGKILL'); } catch (_) { /* already dead */ }
+  }, 3000);
+  proc.on('exit', () => clearTimeout(forceKill));
 }
 
 function sendToRenderer(channel, data) {
@@ -421,7 +429,7 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin' && tunnelStatus !== 'running') {
+  if (process.platform !== 'darwin') {
     stopTunnel();
     app.quit();
   }
@@ -429,4 +437,9 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   stopTunnel();
+  // Destroy tray to release resources
+  if (tray) {
+    tray.destroy();
+    tray = null;
+  }
 });

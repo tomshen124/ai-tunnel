@@ -163,6 +163,9 @@ async function main() {
     log("error", "System", "Uncaught exception: %s", err.message);
     shutdown("uncaughtException");
   });
+
+  // When running as a child process (Electron fork), exit if parent dies
+  process.on("disconnect", () => shutdown("parent-disconnect"));
 }
 
 main().catch((err) => {
