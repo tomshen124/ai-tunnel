@@ -109,6 +109,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Sync version from tag
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          VERSION="${TAG#v}"
+          echo "Syncing package.json version to $VERSION"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+
       - name: Build Electron dist
         run: npm run electron:build && npx electron-builder --publish never
 

@@ -1,5 +1,6 @@
 appId: com.tomshen124.ai-tunnel
 productName: AI-Tunnel
+artifactName: "ai-tunnel-${version}-${os}-${arch}.${ext}"
 directories:
   buildResources: app/assets
   output: dist-electron

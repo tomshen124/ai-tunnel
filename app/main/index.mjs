@@ -8,7 +8,12 @@ import yaml from 'js-yaml';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isDev = !!process.env.VITE_DEV_SERVER_URL;
-const projectRoot = resolve(__dirname, '..', '..');
+// In production the app is packed inside app.asar — config files must live
+// outside the archive.  Use Electron's userData directory (e.g.
+// ~/Library/Application Support/AI-Tunnel) for writable config storage.
+const projectRoot = isDev
+  ? resolve(__dirname, '..', '..')
+  : app.getPath('userData');
 
 // ─── Globals ─────────────────────────────────────────
 let mainWindow = null;
@@ -18,10 +23,15 @@ let tunnelStatus = 'stopped'; // stopped | starting | running | error
 
 // ─── Config path ─────────────────────────────────────
 function getConfigPath() {
+  // Ensure userData directory exists (production)
+  if (!isDev && !existsSync(projectRoot)) {
+    mkdirSync(projectRoot, { recursive: true });
+  }
   const configPath = resolve(projectRoot, 'tunnel.config.yaml');
   if (!existsSync(configPath)) {
-    // Copy example config if no config exists
-    const examplePath = resolve(projectRoot, 'tunnel.config.example.yaml');
+    // In production, read example from inside the packed asar archive
+    const asarRoot = resolve(__dirname, '..', '..');
+    const examplePath = resolve(asarRoot, 'tunnel.config.example.yaml');
     if (existsSync(examplePath)) {
       const example = readFileSync(examplePath, 'utf-8');
       writeFileSync(configPath, example, 'utf-8');
@@ -170,11 +180,13 @@ function startTunnel() {
   updateTrayMenu();
   sendToRenderer('tunnel:status', { status: tunnelStatus });
 
-  const entryFile = resolve(projectRoot, 'src', 'index.mjs');
+  // Source code lives inside the asar archive; only config is in userData
+  const asarRoot = resolve(__dirname, '..', '..');
+  const entryFile = resolve(asarRoot, 'src', 'index.mjs');
   const configPath = getConfigPath();
 
   tunnelProcess = fork(entryFile, [], {
-    cwd: projectRoot,
+    cwd: isDev ? asarRoot : projectRoot,
     env: {
       ...process.env,
       TUNNEL_CONFIG: configPath,
