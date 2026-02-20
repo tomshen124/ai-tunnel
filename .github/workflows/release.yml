@@ -51,7 +51,7 @@ jobs:
             echo "NPM_TOKEN not set; skipping npm publish."
           fi
         env:
-          NPM_TOKEN: ${{ secrets.NPMTOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Setup Node.js
         if: steps.npm.outputs.has == 'true'
@@ -69,7 +69,7 @@ jobs:
         if: steps.npm.outputs.has == 'true'
         run: npm publish --access public
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPMTOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   release:
     needs: test
