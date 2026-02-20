@@ -36,6 +36,8 @@
     .btn-primary:hover { background: #4338ca; }
     .btn-danger { background: #dc2626; color: white; }
     .btn-danger:hover { background: #b91c1c; }
+    .btn-success { background: #16a34a; color: white; }
+    .btn-success:hover { background: #15803d; }
     .btn-ghost { background: transparent; color: #94a3b8; border: 1px solid #334155; }
     .btn-ghost:hover { background: #1e293b; color: #e2e8f0; }
     .stat-value { font-size: 20px; font-weight: 700; color: #f1f5f9; }
@@ -48,12 +50,27 @@
     @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     .pulse { animation: pulse 2s infinite; }
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .tab { padding: 8px 16px; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.15s; }
+    .tab-active { background: #1a1a2e; color: #e2e8f0; border: 1px solid #252547; border-bottom: 1px solid #1a1a2e; }
+    .tab-inactive { background: transparent; color: #64748b; border: 1px solid transparent; }
+    .tab-inactive:hover { color: #94a3b8; }
+    .config-editor { font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace; font-size: 13px; line-height: 1.6; background: #0f0f23; color: #e2e8f0; border: 1px solid #252547; border-radius: 8px; resize: vertical; tab-size: 2; }
+    .config-editor:focus { outline: none; border-color: #4f46e5; }
+    .input { background: #0f0f23; color: #e2e8f0; border: 1px solid #252547; border-radius: 8px; padding: 8px 12px; font-size: 13px; width: 100%; }
+    .input:focus { outline: none; border-color: #4f46e5; }
+    .input::placeholder { color: #475569; }
+    select.input { appearance: none; cursor: pointer; }
+    .toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 10px; font-size: 13px; font-weight: 500; z-index: 1000; animation: fadeIn 0.3s ease; }
+    .toast-success { background: #16a34a; color: white; }
+    .toast-error { background: #dc2626; color: white; }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 900; display: flex; align-items: center; justify-content: center; }
+    .modal { background: #1a1a2e; border: 1px solid #252547; border-radius: 16px; padding: 24px; max-width: 520px; width: 90%; max-height: 90vh; overflow-y: auto; }
   </style>
 </head>
 <body class="min-h-screen p-4 md:p-8">
 
   <!-- Header -->
-  <div class="max-w-6xl mx-auto mb-6">
+  <div class="max-w-6xl mx-auto mb-2">
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-3">
         <span class="text-2xl">🚇</span>
@@ -67,62 +84,133 @@
     </div>
   </div>
 
-  <!-- Stats Bar -->
-  <div class="max-w-6xl mx-auto mb-6">
-    <div class="grid grid-cols-4 gap-4">
-      <div class="card p-4 text-center">
-        <div class="stat-value" id="stat-channels">-</div>
-        <div class="stat-label">Channels</div>
+  <!-- Tabs -->
+  <div class="max-w-6xl mx-auto mb-4 flex gap-1 border-b border-slate-800">
+    <div class="tab tab-active" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</div>
+    <div class="tab tab-inactive" data-tab="settings" onclick="switchTab('settings')">⚙️ Settings</div>
+  </div>
+
+  <!-- Dashboard Tab -->
+  <div id="tab-dashboard">
+    <!-- Stats Bar -->
+    <div class="max-w-6xl mx-auto mb-6">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="card p-4 text-center">
+          <div class="stat-value" id="stat-channels">-</div>
+          <div class="stat-label">Channels</div>
+        </div>
+        <div class="card p-4 text-center">
+          <div class="stat-value" id="stat-requests">0</div>
+          <div class="stat-label">Total Requests</div>
+        </div>
+        <div class="card p-4 text-center">
+          <div class="stat-value text-green-400" id="stat-success">0%</div>
+          <div class="stat-label">Success Rate</div>
+        </div>
+        <div class="card p-4 text-center">
+          <div class="stat-value text-cyan-400" id="stat-latency">-</div>
+          <div class="stat-label">Avg Latency</div>
+        </div>
       </div>
-      <div class="card p-4 text-center">
-        <div class="stat-value" id="stat-requests">0</div>
-        <div class="stat-label">Total Requests</div>
+    </div>
+
+    <!-- Channel Cards -->
+    <div class="max-w-6xl mx-auto mb-6">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Channels</h2>
+        <button class="btn btn-ghost text-xs" onclick="refreshChannels()">🔄 Refresh</button>
       </div>
-      <div class="card p-4 text-center">
-        <div class="stat-value text-green-400" id="stat-success">0%</div>
-        <div class="stat-label">Success Rate</div>
+      <div id="channels" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div class="card p-6 flex items-center justify-center text-slate-500">
+          <span class="pulse">Loading channels...</span>
+        </div>
       </div>
-      <div class="card p-4 text-center">
-        <div class="stat-value text-cyan-400" id="stat-latency">-</div>
-        <div class="stat-label">Avg Latency</div>
+    </div>
+
+    <!-- Logs -->
+    <div class="max-w-6xl mx-auto">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">📋 Live Logs</h2>
+        <div class="flex gap-2">
+          <button class="btn btn-ghost text-xs" onclick="clearLogs()">Clear</button>
+          <label class="flex items-center gap-1 text-xs text-slate-500">
+            <input type="checkbox" id="auto-scroll" checked class="accent-indigo-500"> Auto-scroll
+          </label>
+        </div>
+      </div>
+      <div class="card p-4">
+        <div id="logs"></div>
+        <div id="log-empty" class="text-center text-slate-600 text-sm py-4">Waiting for events...</div>
       </div>
     </div>
   </div>
 
-  <!-- Channel Cards -->
-  <div class="max-w-6xl mx-auto mb-6">
-    <div class="flex items-center justify-between mb-3">
-      <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Channels</h2>
-      <button class="btn btn-ghost text-xs" onclick="refreshChannels()">🔄 Refresh</button>
-    </div>
-    <div id="channels" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      <div class="card p-6 flex items-center justify-center text-slate-500">
-        <span class="pulse">Loading channels...</span>
+  <!-- Settings Tab -->
+  <div id="tab-settings" class="hidden">
+    <div class="max-w-6xl mx-auto">
+
+      <!-- Channel Management -->
+      <div class="mb-6">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Channel Management</h2>
+          <button class="btn btn-primary text-xs" onclick="showAddChannelModal()">+ Add Channel</button>
+        </div>
+        <div id="config-channels" class="grid grid-cols-1 gap-3">
+          <div class="card p-6 text-center text-slate-500">Loading config...</div>
+        </div>
       </div>
+
+      <!-- Raw Config Editor -->
+      <div class="mb-6">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">📝 Config File</h2>
+          <div class="flex gap-2">
+            <button class="btn btn-ghost text-xs" onclick="loadConfig()">🔄 Reload</button>
+            <button class="btn btn-success text-xs" onclick="saveConfig()">💾 Save & Apply</button>
+          </div>
+        </div>
+        <div class="card p-4">
+          <div id="config-path" class="text-xs text-slate-600 mb-2"></div>
+          <textarea id="config-editor" class="config-editor w-full" rows="24" spellcheck="false" placeholder="Loading config..."></textarea>
+        </div>
+      </div>
+
     </div>
   </div>
 
-  <!-- Logs -->
-  <div class="max-w-6xl mx-auto">
-    <div class="flex items-center justify-between mb-3">
-      <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">📋 Live Logs</h2>
-      <div class="flex gap-2">
-        <button class="btn btn-ghost text-xs" onclick="clearLogs()">Clear</button>
-        <label class="flex items-center gap-1 text-xs text-slate-500">
-          <input type="checkbox" id="auto-scroll" checked class="accent-indigo-500"> Auto-scroll
-        </label>
-      </div>
-    </div>
-    <div class="card p-4">
-      <div id="logs"></div>
-      <div id="log-empty" class="text-center text-slate-600 text-sm py-4">Waiting for events...</div>
-    </div>
-  </div>
+  <!-- Modal Container -->
+  <div id="modal" class="hidden"></div>
+
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
 
 <script>
 // ─── State ───────────────────────────────────────────
 let channels = [];
 let eventSource = null;
+let currentTab = 'dashboard';
+let configData = null;
+
+// ─── Toast ───────────────────────────────────────────
+function toast(msg, type = 'success') {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+// ─── Tabs ────────────────────────────────────────────
+function switchTab(name) {
+  currentTab = name;
+  document.querySelectorAll('[data-tab]').forEach(t => {
+    t.classList.toggle('tab-active', t.dataset.tab === name);
+    t.classList.toggle('tab-inactive', t.dataset.tab !== name);
+  });
+  document.getElementById('tab-dashboard').classList.toggle('hidden', name !== 'dashboard');
+  document.getElementById('tab-settings').classList.toggle('hidden', name !== 'settings');
+  if (name === 'settings') loadConfig();
+}
 
 // ─── API Helpers ─────────────────────────────────────
 const API = '';
@@ -135,7 +223,7 @@ async function api(path, opts = {}) {
   return res.json();
 }
 
-// ─── Render ──────────────────────────────────────────
+// ─── Dashboard Render ────────────────────────────────
 function renderChannels(data) {
   channels = data;
   const container = document.getElementById('channels');
@@ -149,15 +237,11 @@ function renderChannels(data) {
     const statusClass = !ch.enabled ? 'status-disabled' :
       ch.health === 'healthy' ? 'status-healthy' :
       ch.health === 'unhealthy' ? 'status-unhealthy' : 'status-unknown';
-
     const statusText = !ch.enabled ? 'Disabled' :
       ch.health === 'healthy' ? 'Online' :
       ch.health === 'unhealthy' ? 'Offline' : 'Checking...';
-
     const successRate = ch.stats.totalRequests > 0
-      ? ((ch.stats.successCount / ch.stats.totalRequests) * 100).toFixed(1) + '%'
-      : '--';
-
+      ? ((ch.stats.successCount / ch.stats.totalRequests) * 100).toFixed(1) + '%' : '--';
     const latency = ch.latency != null ? ch.latency + 'ms' : '--';
 
     return `
@@ -170,50 +254,29 @@ function renderChannels(data) {
           </div>
           <span class="text-xs text-slate-500">${statusText}</span>
         </div>
-
-        <div class="text-xs text-slate-500 mb-3 truncate" title="${esc(ch.target)}">
-          ${esc(ch.target)}
-        </div>
-
+        <div class="text-xs text-slate-500 mb-3 truncate" title="${esc(ch.target)}">${esc(ch.target)}</div>
         <div class="grid grid-cols-4 gap-2 mb-4 text-center">
-          <div>
-            <div class="text-sm font-bold text-cyan-400">${latency}</div>
-            <div class="text-[10px] text-slate-600">Latency</div>
-          </div>
-          <div>
-            <div class="text-sm font-bold text-green-400">${successRate}</div>
-            <div class="text-[10px] text-slate-600">Success</div>
-          </div>
-          <div>
-            <div class="text-sm font-bold text-slate-300">${ch.stats.totalRequests}</div>
-            <div class="text-[10px] text-slate-600">Requests</div>
-          </div>
-          <div>
-            <div class="text-sm font-bold ${ch.keys.alive === ch.keys.total ? 'text-green-400' : 'text-amber-400'}">${ch.keys.alive}/${ch.keys.total}</div>
-            <div class="text-[10px] text-slate-600">Keys</div>
-          </div>
+          <div><div class="text-sm font-bold text-cyan-400">${latency}</div><div class="text-[10px] text-slate-600">Latency</div></div>
+          <div><div class="text-sm font-bold text-green-400">${successRate}</div><div class="text-[10px] text-slate-600">Success</div></div>
+          <div><div class="text-sm font-bold text-slate-300">${ch.stats.totalRequests}</div><div class="text-[10px] text-slate-600">Requests</div></div>
+          <div><div class="text-sm font-bold ${ch.keys.alive === ch.keys.total ? 'text-green-400' : 'text-amber-400'}">${ch.keys.alive}/${ch.keys.total}</div><div class="text-[10px] text-slate-600">Keys</div></div>
         </div>
-
         <div class="flex gap-2">
-          <button class="btn ${ch.enabled ? 'btn-danger' : 'btn-primary'} flex-1 text-xs"
-                  onclick="toggleChannel('${esc(ch.name)}')">
+          <button class="btn ${ch.enabled ? 'btn-danger' : 'btn-primary'} flex-1 text-xs" onclick="toggleChannel('${esc(ch.name)}')">
             ${ch.enabled ? '⏸ Pause' : '▶️ Enable'}
           </button>
         </div>
-      </div>
-    `;
+      </div>`;
   }).join('');
 
   // Update stats bar
   const healthy = data.filter(c => c.health === 'healthy').length;
   document.getElementById('stat-channels').textContent = `${healthy}/${data.length}`;
-
   const totalReq = data.reduce((s, c) => s + c.stats.totalRequests, 0);
   const totalOk = data.reduce((s, c) => s + c.stats.successCount, 0);
   document.getElementById('stat-requests').textContent = totalReq.toLocaleString();
   document.getElementById('stat-success').textContent = totalReq > 0
     ? ((totalOk / totalReq) * 100).toFixed(1) + '%' : '--';
-
   const latencies = data.filter(c => c.latency != null).map(c => c.latency);
   const avgLatency = latencies.length > 0
     ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : null;
@@ -224,28 +287,243 @@ function appendLog(entry) {
   const container = document.getElementById('logs');
   const emptyEl = document.getElementById('log-empty');
   if (emptyEl) emptyEl.style.display = 'none';
-
   const level = entry.level || 'info';
   const tag = entry.tag || entry.channel || '';
   const msg = entry.message || '';
   const time = entry.time ? new Date(entry.time).toLocaleTimeString('en-US', { hour12: false }) : '';
-
   const icons = { debug: '🔍', info: '✅', warn: '⚠️', error: '❌' };
-  const icon = icons[level] || '';
-
   const line = document.createElement('div');
   line.className = `log-line log-${level}`;
-  line.textContent = `${time} ${icon} [${tag}] ${msg}`;
+  line.textContent = `${time} ${icons[level] || ''} [${tag}] ${msg}`;
   container.appendChild(line);
+  while (container.children.length > 200) container.removeChild(container.firstChild);
+  if (document.getElementById('auto-scroll').checked) container.scrollTop = container.scrollHeight;
+}
 
-  // Limit log lines
-  while (container.children.length > 200) {
-    container.removeChild(container.firstChild);
+// ─── Settings: Config ────────────────────────────────
+async function loadConfig() {
+  try {
+    const data = await api('/api/config');
+    configData = data;
+    document.getElementById('config-editor').value = data.content || '';
+    document.getElementById('config-path').textContent = data.path || '';
+    renderConfigChannels(data.content);
+  } catch (e) {
+    toast('Failed to load config: ' + e.message, 'error');
+  }
+}
+
+async function saveConfig() {
+  const content = document.getElementById('config-editor').value;
+  try {
+    const res = await api('/api/config', {
+      method: 'PUT',
+      body: JSON.stringify({ content }),
+    });
+    if (res.ok) {
+      toast('Config saved & reloaded!');
+      setTimeout(refreshChannels, 500);
+      renderConfigChannels(content);
+    } else {
+      toast(res.error || 'Save failed', 'error');
+    }
+  } catch (e) {
+    toast('Save failed: ' + e.message, 'error');
+  }
+}
+
+function renderConfigChannels(yamlContent) {
+  const container = document.getElementById('config-channels');
+  try {
+    // Parse YAML manually (basic — just extract channel names/targets)
+    const lines = yamlContent.split('\n');
+    const chs = [];
+    let current = null;
+    for (const line of lines) {
+      const nameMatch = line.match(/^\s+-\s+name:\s*["']?([^"'\n]+)/);
+      const targetMatch = line.match(/^\s+target:\s*["']?([^"'\n]+)/);
+      const weightMatch = line.match(/^\s+weight:\s*(\d+)/);
+      const fallbackMatch = line.match(/^\s+fallback:\s*(true|false)/);
+      if (nameMatch) {
+        if (current) chs.push(current);
+        current = { name: nameMatch[1].trim(), target: '', weight: 10, fallback: false };
+      }
+      if (current && targetMatch) current.target = targetMatch[1].trim().replace(/["']$/, '');
+      if (current && weightMatch) current.weight = parseInt(weightMatch[1]);
+      if (current && fallbackMatch) current.fallback = fallbackMatch[1] === 'true';
+    }
+    if (current) chs.push(current);
+
+    if (chs.length === 0) {
+      container.innerHTML = '<div class="card p-4 text-center text-slate-500">No channels found in config</div>';
+      return;
+    }
+
+    container.innerHTML = chs.map(ch => `
+      <div class="card p-4 flex items-center justify-between fade-in">
+        <div class="flex-1">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="font-semibold text-white">${esc(ch.name)}</span>
+            <span class="text-xs text-slate-600">weight: ${ch.weight}</span>
+            ${ch.fallback ? '<span class="text-xs bg-amber-900/50 text-amber-400 px-1.5 py-0.5 rounded">backup</span>' : ''}
+          </div>
+          <div class="text-xs text-slate-500 truncate">${esc(ch.target)}</div>
+        </div>
+        <div class="flex gap-2 ml-4">
+          <button class="btn btn-ghost text-xs" onclick="editChannelInEditor('${esc(ch.name)}')">✏️ Edit</button>
+          <button class="btn btn-danger text-xs" onclick="deleteChannel('${esc(ch.name)}')">🗑</button>
+        </div>
+      </div>
+    `).join('');
+  } catch {
+    container.innerHTML = '<div class="card p-4 text-center text-slate-500">Could not parse channels</div>';
+  }
+}
+
+// ─── Settings: Channel CRUD ──────────────────────────
+function showAddChannelModal() {
+  const modal = document.getElementById('modal');
+  modal.className = '';
+  modal.innerHTML = `
+    <div class="modal-overlay" onclick="closeModal(event)">
+      <div class="modal" onclick="event.stopPropagation()">
+        <h3 class="text-lg font-bold text-white mb-4">Add Channel</h3>
+        <div class="space-y-3">
+          <div>
+            <label class="text-xs text-slate-400 block mb-1">Name</label>
+            <input id="ch-name" class="input" placeholder="e.g. my-api">
+          </div>
+          <div>
+            <label class="text-xs text-slate-400 block mb-1">Target URL</label>
+            <input id="ch-target" class="input" placeholder="https://api.example.com">
+          </div>
+          <div>
+            <label class="text-xs text-slate-400 block mb-1">API Keys (one per line)</label>
+            <textarea id="ch-keys" class="input" rows="3" placeholder="sk-key1&#10;sk-key2" style="font-family:monospace;resize:vertical;"></textarea>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-slate-400 block mb-1">Weight</label>
+              <input id="ch-weight" class="input" type="number" value="10" min="1">
+            </div>
+            <div>
+              <label class="text-xs text-slate-400 block mb-1">Key Strategy</label>
+              <select id="ch-strategy" class="input">
+                <option value="round-robin">Round Robin</option>
+                <option value="random">Random</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <input id="ch-fallback" type="checkbox" class="accent-indigo-500">
+            <label for="ch-fallback" class="text-xs text-slate-400">Fallback (backup channel)</label>
+          </div>
+          <div class="border-t border-slate-800 pt-3">
+            <div class="flex items-center gap-2 mb-2">
+              <input id="ch-tunnel" type="checkbox" class="accent-indigo-500">
+              <label for="ch-tunnel" class="text-xs text-slate-400">Enable SSH Tunnel</label>
+            </div>
+            <div id="tunnel-fields" class="hidden">
+              <label class="text-xs text-slate-400 block mb-1">Remote Port</label>
+              <input id="ch-remote-port" class="input" type="number" placeholder="9090">
+            </div>
+          </div>
+        </div>
+        <div class="flex gap-2 mt-5">
+          <button class="btn btn-primary flex-1" onclick="submitAddChannel()">Add Channel</button>
+          <button class="btn btn-ghost flex-1" onclick="closeModal()">Cancel</button>
+        </div>
+      </div>
+    </div>`;
+
+  // Toggle tunnel fields
+  document.getElementById('ch-tunnel').addEventListener('change', (e) => {
+    document.getElementById('tunnel-fields').classList.toggle('hidden', !e.target.checked);
+  });
+}
+
+async function submitAddChannel() {
+  const name = document.getElementById('ch-name').value.trim();
+  const target = document.getElementById('ch-target').value.trim();
+  const keysRaw = document.getElementById('ch-keys').value.trim();
+  const weight = parseInt(document.getElementById('ch-weight').value) || 10;
+  const keyStrategy = document.getElementById('ch-strategy').value;
+  const fallback = document.getElementById('ch-fallback').checked;
+  const tunnelEnabled = document.getElementById('ch-tunnel').checked;
+  const remotePort = parseInt(document.getElementById('ch-remote-port')?.value) || 0;
+
+  if (!name || !target || !keysRaw) {
+    toast('Name, target, and at least one key are required', 'error');
+    return;
   }
 
-  if (document.getElementById('auto-scroll').checked) {
-    container.scrollTop = container.scrollHeight;
+  const keys = keysRaw.split('\n').map(k => k.trim()).filter(Boolean);
+  const channel = { name, target, keys, weight, keyStrategy, fallback };
+  if (tunnelEnabled && remotePort) {
+    channel.tunnel = { enabled: true, remotePort };
   }
+
+  try {
+    const res = await api('/api/channels', {
+      method: 'POST',
+      body: JSON.stringify(channel),
+    });
+    if (res.ok) {
+      toast(`Channel '${name}' added!`);
+      closeModal();
+      loadConfig();
+      setTimeout(refreshChannels, 500);
+    } else {
+      toast(res.error || 'Failed to add channel', 'error');
+    }
+  } catch (e) {
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+async function deleteChannel(name) {
+  if (!confirm(`Delete channel '${name}'?`)) return;
+  try {
+    const res = await api(`/api/channels/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    if (res.ok) {
+      toast(`Channel '${name}' deleted`);
+      loadConfig();
+      setTimeout(refreshChannels, 500);
+    } else {
+      toast(res.error || 'Delete failed', 'error');
+    }
+  } catch (e) {
+    toast('Error: ' + e.message, 'error');
+  }
+}
+
+function editChannelInEditor(name) {
+  // Scroll to the channel in the raw editor
+  const editor = document.getElementById('config-editor');
+  const text = editor.value;
+  const searchStr = `name: "${name}"`;
+  const searchStr2 = `name: '${name}'`;
+  const searchStr3 = `name: ${name}`;
+  let idx = text.indexOf(searchStr);
+  if (idx === -1) idx = text.indexOf(searchStr2);
+  if (idx === -1) idx = text.indexOf(searchStr3);
+  if (idx !== -1) {
+    editor.focus();
+    editor.setSelectionRange(idx, idx + name.length + 6);
+    // Scroll into view
+    const linesBefore = text.substring(0, idx).split('\n').length;
+    const lineHeight = 21; // approximate
+    editor.scrollTop = Math.max(0, (linesBefore - 3) * lineHeight);
+    toast('Highlighted in editor — edit and save', 'success');
+  } else {
+    toast('Could not find channel in config', 'error');
+  }
+}
+
+function closeModal(event) {
+  if (event && event.target !== event.currentTarget) return;
+  document.getElementById('modal').className = 'hidden';
+  document.getElementById('modal').innerHTML = '';
 }
 
 // ─── Actions ─────────────────────────────────────────
@@ -271,7 +549,6 @@ function clearLogs() {
 // ─── SSE Connection ──────────────────────────────────
 function connectSSE() {
   if (eventSource) eventSource.close();
-
   eventSource = new EventSource('/api/logs');
   const dot = document.getElementById('conn-status');
 
@@ -283,28 +560,12 @@ function connectSSE() {
   eventSource.onmessage = (e) => {
     try {
       const data = JSON.parse(e.data);
-
-      // It's a log entry
-      if (data.level && data.message) {
-        appendLog(data);
-      }
-
-      // It's an event with type
-      if (data.type === 'request' || data.type === 'health' || data.type === 'channel_toggle') {
-        // Refresh channels on state-changing events
-        refreshChannels();
-      }
-
-      if (data.type === 'log') {
-        appendLog(data);
-      }
-
-      // Retry event
+      if (data.level && data.message) appendLog(data);
+      if (data.type === 'request' || data.type === 'health' || data.type === 'channel_toggle') refreshChannels();
+      if (data.type === 'log') appendLog(data);
       if (data.type === 'retry') {
         appendLog({
-          time: new Date().toISOString(),
-          level: 'warn',
-          tag: 'Retry',
+          time: new Date().toISOString(), level: 'warn', tag: 'Retry',
           message: `Attempt ${data.attempt + 1}/${data.maxAttempts} from ${data.fromChannel} (delay: ${data.delay}ms)`,
         });
       }
@@ -324,6 +585,7 @@ function updateUptime() {
     const h = Math.floor(s / 3600);
     const m = Math.floor((s % 3600) / 60);
     document.getElementById('uptime').textContent = `Uptime: ${h}h ${m}m`;
+    document.getElementById('version').textContent = `v${data.version || '2.0.0'}`;
   }).catch(() => {});
 }
 
@@ -333,6 +595,17 @@ function esc(s) {
   d.textContent = s;
   return d.innerHTML;
 }
+
+// ─── Keyboard Shortcuts ──────────────────────────────
+document.addEventListener('keydown', (e) => {
+  // Ctrl+S / Cmd+S to save config when in settings tab
+  if ((e.ctrlKey || e.metaKey) && e.key === 's' && currentTab === 'settings') {
+    e.preventDefault();
+    saveConfig();
+  }
+  // Escape to close modal
+  if (e.key === 'Escape') closeModal();
+});
 
 // ─── Init ────────────────────────────────────────────
 refreshChannels();

@@ -40,6 +40,18 @@ if [[ "${1:-}" == "--uninstall" ]]; then
     ok "Removed ${INSTALL_DIR}"
   fi
   
+  # Remove systemd service
+  if command -v systemctl &>/dev/null; then
+    if [ -f /etc/systemd/system/ai-tunnel.service ]; then
+      info "Removing systemd service..."
+      sudo systemctl stop ai-tunnel 2>/dev/null || true
+      sudo systemctl disable ai-tunnel 2>/dev/null || true
+      sudo rm -f /etc/systemd/system/ai-tunnel.service
+      sudo systemctl daemon-reload 2>/dev/null || true
+      ok "Systemd service removed"
+    fi
+  fi
+
   ok "AI-Tunnel uninstalled."
   exit 0
 fi
@@ -144,6 +156,54 @@ echo ""
 echo "  Config: tunnel.config.yaml"
 echo "  Docs:   https://github.com/${REPO}"
 echo ""
+# --- Setup systemd service (Linux only) ---
+if command -v systemctl &>/dev/null; then
+  info "Setting up systemd service..."
+  
+  RUN_USER=$(whoami)
+  NODE_PATH=$(command -v node)
+  
+  SERVICE_CONTENT="[Unit]
+Description=AI-Tunnel API Proxy
+After=network.target
+
+[Service]
+Type=simple
+User=${RUN_USER}
+WorkingDirectory=${INSTALL_DIR}
+ExecStart=${NODE_PATH} ${INSTALL_DIR}/src/index.mjs
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target"
+
+  if [ "$(id -u)" -eq 0 ]; then
+    echo "${SERVICE_CONTENT}" > /etc/systemd/system/ai-tunnel.service
+    systemctl daemon-reload
+    systemctl enable ai-tunnel
+    ok "Systemd service created and enabled"
+  else
+    echo "${SERVICE_CONTENT}" | sudo tee /etc/systemd/system/ai-tunnel.service > /dev/null
+    sudo systemctl daemon-reload
+    sudo systemctl enable ai-tunnel
+    ok "Systemd service created and enabled"
+  fi
+  
+  echo ""
+  echo "  Service commands:"
+  echo "    sudo systemctl start ai-tunnel     # Start"
+  echo "    sudo systemctl stop ai-tunnel      # Stop"
+  echo "    sudo systemctl restart ai-tunnel   # Restart"
+  echo "    sudo systemctl status ai-tunnel    # Status"
+  echo "    journalctl -u ai-tunnel -f         # Follow logs"
+  echo ""
+else
+  warn "systemd not found (macOS?). Use 'ai-tunnel start' for daemon mode."
+  echo ""
+fi
+
 echo "  Uninstall:"
 echo "    curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | bash -s -- --uninstall"
 echo ""

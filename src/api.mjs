@@ -1,9 +1,10 @@
 // src/api.mjs - Web API server + SSE push + static UI serving
 
 import { createServer } from "http";
-import { readFileSync } from "fs";
+import { readFileSync, writeFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import yaml from "js-yaml";
 import { log, emit, getRecentLogs, subscribe } from "./logger.mjs";
 import { channelToJSON, addKey, removeKey } from "./channel.mjs";
 
@@ -29,6 +30,7 @@ function getUiHtml() {
  */
 export function createApiServer(router, opts) {
   const authToken = opts.token || process.env.AI_TUNNEL_API_TOKEN || null;
+  const configPath = opts.configPath || null;
 
   const server = createServer(async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -89,6 +91,33 @@ export function createApiServer(router, opts) {
       const delKeyMatch = path.match(/^\/api\/channels\/([^/]+)\/keys\/(\d+)$/);
       if (delKeyMatch && req.method === "DELETE") {
         return handleDeleteKey(router, decodeURIComponent(delKeyMatch[1]), parseInt(delKeyMatch[2]), res);
+      }
+
+      // GET /api/config — return raw YAML config
+      if (path === "/api/config" && req.method === "GET") {
+        return handleGetConfig(configPath, res);
+      }
+
+      // PUT /api/config — update entire config YAML
+      if (path === "/api/config" && req.method === "PUT") {
+        return await handlePutConfig(configPath, req, res);
+      }
+
+      // POST /api/channels — add a new channel to config
+      if (path === "/api/channels" && req.method === "POST") {
+        return await handleAddChannel(configPath, req, res);
+      }
+
+      // PUT /api/channels/:name — update a channel in config
+      const updateChMatch = path.match(/^\/api\/channels\/([^/]+)$/);
+      if (updateChMatch && req.method === "PUT") {
+        return await handleUpdateChannel(configPath, decodeURIComponent(updateChMatch[1]), req, res);
+      }
+
+      // DELETE /api/channels/:name — delete a channel from config
+      const deleteChMatch = path.match(/^\/api\/channels\/([^/]+)$/);
+      if (deleteChMatch && req.method === "DELETE") {
+        return await handleDeleteChannel(configPath, decodeURIComponent(deleteChMatch[1]), res);
       }
 
       // ─── UI ────────────────────────────────────
@@ -224,6 +253,113 @@ function handleLogsSSE(res) {
   const cleanup = () => { unsub(); clearInterval(hb); };
   res.on("close", cleanup);
   res.on("error", cleanup);
+}
+
+// ─── Config Handlers ─────────────────────────────────
+
+function handleGetConfig(configPath, res) {
+  if (!configPath) return json(res, 500, { error: "Config path not available" });
+  try {
+    const content = readFileSync(configPath, "utf-8");
+    json(res, 200, { path: configPath, content });
+  } catch (e) {
+    json(res, 500, { error: "Failed to read config: " + e.message });
+  }
+}
+
+async function handlePutConfig(configPath, req, res) {
+  if (!configPath) return json(res, 500, { error: "Config path not available" });
+  const body = await readBody(req);
+  if (body === null) return json(res, 413, { error: "Request body too large" });
+  try {
+    const { content } = JSON.parse(body);
+    if (!content || typeof content !== "string") {
+      return json(res, 400, { error: "Missing 'content' field (YAML string)" });
+    }
+    // Validate YAML
+    const parsed = yaml.load(content);
+    if (!parsed || typeof parsed !== "object") {
+      return json(res, 400, { error: "Invalid YAML: must be an object" });
+    }
+    // Basic structure check
+    if (!parsed.channels && !parsed.sites) {
+      return json(res, 400, { error: "Config must have 'channels' defined" });
+    }
+    writeFileSync(configPath, content, "utf-8");
+    emit("config_reload_request", {});
+    log("info", "Config", "Config updated via Web UI");
+    json(res, 200, { ok: true, message: "Config saved and reload triggered" });
+  } catch (e) {
+    if (e instanceof SyntaxError) {
+      return json(res, 400, { error: "Invalid JSON body" });
+    }
+    json(res, 400, { error: "Failed to save config: " + e.message });
+  }
+}
+
+async function handleAddChannel(configPath, req, res) {
+  if (!configPath) return json(res, 500, { error: "Config path not available" });
+  const body = await readBody(req);
+  if (body === null) return json(res, 413, { error: "Request body too large" });
+  try {
+    const channel = JSON.parse(body);
+    if (!channel.name || !channel.target || !channel.keys || !channel.keys.length) {
+      return json(res, 400, { error: "Channel needs name, target, and at least one key" });
+    }
+    const raw = readFileSync(configPath, "utf-8");
+    const config = yaml.load(raw);
+    if (!config.channels) config.channels = [];
+    // Check duplicate
+    if (config.channels.find(c => c.name === channel.name)) {
+      return json(res, 409, { error: `Channel '${channel.name}' already exists` });
+    }
+    config.channels.push(channel);
+    writeFileSync(configPath, yaml.dump(config, { lineWidth: 120 }), "utf-8");
+    emit("config_reload_request", {});
+    log("info", "Config", "Channel '%s' added via Web UI", channel.name);
+    json(res, 201, { ok: true, channel: channel.name });
+  } catch (e) {
+    json(res, 400, { error: e.message });
+  }
+}
+
+async function handleUpdateChannel(configPath, name, req, res) {
+  if (!configPath) return json(res, 500, { error: "Config path not available" });
+  const body = await readBody(req);
+  if (body === null) return json(res, 413, { error: "Request body too large" });
+  try {
+    const updates = JSON.parse(body);
+    const raw = readFileSync(configPath, "utf-8");
+    const config = yaml.load(raw);
+    if (!config.channels) return json(res, 404, { error: "No channels in config" });
+    const idx = config.channels.findIndex(c => c.name === name);
+    if (idx === -1) return json(res, 404, { error: `Channel '${name}' not found` });
+    config.channels[idx] = { ...config.channels[idx], ...updates };
+    writeFileSync(configPath, yaml.dump(config, { lineWidth: 120 }), "utf-8");
+    emit("config_reload_request", {});
+    log("info", "Config", "Channel '%s' updated via Web UI", name);
+    json(res, 200, { ok: true, channel: name });
+  } catch (e) {
+    json(res, 400, { error: e.message });
+  }
+}
+
+async function handleDeleteChannel(configPath, name, res) {
+  if (!configPath) return json(res, 500, { error: "Config path not available" });
+  try {
+    const raw = readFileSync(configPath, "utf-8");
+    const config = yaml.load(raw);
+    if (!config.channels) return json(res, 404, { error: "No channels in config" });
+    const idx = config.channels.findIndex(c => c.name === name);
+    if (idx === -1) return json(res, 404, { error: `Channel '${name}' not found` });
+    config.channels.splice(idx, 1);
+    writeFileSync(configPath, yaml.dump(config, { lineWidth: 120 }), "utf-8");
+    emit("config_reload_request", {});
+    log("info", "Config", "Channel '%s' deleted via Web UI", name);
+    json(res, 200, { ok: true, deleted: name });
+  } catch (e) {
+    json(res, 400, { error: e.message });
+  }
 }
 
 // ─── Helpers ─────────────────────────────────────────

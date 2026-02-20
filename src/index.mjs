@@ -87,6 +87,7 @@ async function main() {
       port: config.server.ui?.port || 3000,
       host: config.server.ui?.host || "127.0.0.1",
       token: config.server.ui?.token || null,
+      configPath: config._path || null,
     });
   }
 
