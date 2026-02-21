@@ -373,9 +373,92 @@ By default:
 > Tip: Keep Web UI bound to 127.0.0.1 unless you really need remote access. If you expose it publicly, set `server.ui.token` or put it behind a reverse proxy with auth.
 
 
-The v1 `sites` config format is still supported — it auto-converts to v2 `channels` format on startup.
+## macOS: Run as a background service (launchd)
 
-## Tech Stack
+To run AI-Tunnel 24/7 on macOS (auto-start on login, auto-restart on crash), use **launchd**.
+
+### 1) Install
+
+```bash
+npm i -g @tomshen124/ai-tunnel
+```
+
+### 2) Choose a config path
+
+Recommended (per-user):
+
+```bash
+CFG="$HOME/.config/ai-tunnel/tunnel.config.yaml"
+mkdir -p "$(dirname "$CFG")"
+# optional: seed
+[ -f "$CFG" ] || cp /path/to/tunnel.config.example.yaml "$CFG"
+```
+
+### 3) Create a LaunchAgent plist
+
+Create: `~/Library/LaunchAgents/com.tomshen.ai-tunnel.plist`
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.tomshen.ai-tunnel</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/ai-tunnel</string>
+    <string>start</string>
+    <string>-f</string>
+    <string>--config</string>
+    <string>/Users/YOUR_USER/.config/ai-tunnel/tunnel.config.yaml</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/YOUR_USER/Library/Logs/ai-tunnel.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/YOUR_USER/Library/Logs/ai-tunnel.err.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>NODE_ENV</key>
+    <string>production</string>
+  </dict>
+</dict>
+</plist>
+```
+
+> Notes:
+> - Replace `YOUR_USER` with your actual username.
+> - If your `ai-tunnel` binary path differs (e.g. Apple Silicon Homebrew uses `/opt/homebrew/bin/ai-tunnel`), update it accordingly.
+
+### 4) Load / unload
+
+```bash
+# Load and start
+launchctl load -w ~/Library/LaunchAgents/com.tomshen.ai-tunnel.plist
+
+# Stop and unload
+launchctl unload -w ~/Library/LaunchAgents/com.tomshen.ai-tunnel.plist
+```
+
+### 5) Open Web UI
+
+Default:
+
+- Proxy:  http://127.0.0.1:9000
+- Web UI: http://127.0.0.1:3000
+
+> Tip: Keep Web UI bound to 127.0.0.1 unless you really need remote access. If you expose it publicly, set `server.ui.token` or put it behind a reverse proxy with auth.
+
+## v1 Compatibility
+
 
 - **Runtime:** Node.js >= 18 (ESM)
 - **SSH:** ssh2 (pure JS, no system SSH client needed)
