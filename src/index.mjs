@@ -83,10 +83,30 @@ async function main() {
   // ─── Start Web UI / API server ────────────────────
   let apiServer = null;
   if (config.server.ui?.enabled !== false) {
+    const uiHost = config.server.ui?.host || "127.0.0.1";
+    const uiPort = config.server.ui?.port || 3000;
+    const uiToken = config.server.ui?.token || null;
+
+    const isPublicHost =
+      uiHost === "0.0.0.0" ||
+      uiHost === "::" ||
+      (uiHost !== "127.0.0.1" && uiHost !== "localhost");
+
+    if (isPublicHost && !uiToken) {
+      log(
+        "warn",
+        "UI",
+        "Web UI is listening on '%s:%d' WITHOUT token. This is unsafe on public hosts. " +
+          "Recommendation: keep ui.host=127.0.0.1, or set server.ui.token, or put it behind Nginx/Caddy with auth.",
+        uiHost,
+        uiPort
+      );
+    }
+
     apiServer = createApiServer(router, {
-      port: config.server.ui?.port || 3000,
-      host: config.server.ui?.host || "127.0.0.1",
-      token: config.server.ui?.token || null,
+      port: uiPort,
+      host: uiHost,
+      token: uiToken,
       configPath: config._path || null,
     });
   }
