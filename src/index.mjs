@@ -44,7 +44,7 @@ async function main() {
   let tunnelShutdown = null;
   const tunnelChannels = channels.filter((ch) => ch.tunnel?.enabled);
 
-  if (config.ssh && tunnelChannels.length > 0) {
+  if (config.ssh?.enabled && tunnelChannels.length > 0) {
     // Build a tunnel config compatible with existing tunnel.mjs
     const tunnelConfig = {
       ssh: config.ssh,
@@ -106,7 +106,12 @@ async function main() {
       stopHealthChecks();
       stopHealthChecks = startHealthChecks(newChannels);
 
-      log("info", "Config", "Hot reload complete (%d channels)", newChannels.length);
+      log(
+        "info",
+        "Config",
+        "Hot reload complete (%d channels)",
+        newChannels.length
+      );
     });
 
     // Handle config reload request from UI
