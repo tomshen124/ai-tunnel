@@ -280,11 +280,15 @@ Request → Channel A (weight: 10)
 ## CLI Commands
 
 ```
-ai-tunnel init      Create tunnel.config.yaml from template
-ai-tunnel start     Start the tunnel proxy (default command)
-ai-tunnel status    Show tunnel status and channel health
-ai-tunnel stop      Stop a running tunnel process
-ai-tunnel help      Show help
+ai-tunnel init                  Create tunnel.config.yaml from template
+ai-tunnel start                 Start in background (daemon mode)
+ai-tunnel start -f              Start in foreground
+ai-tunnel start --config PATH   Start with a specific config file
+ai-tunnel status                Show tunnel status and channel health
+ai-tunnel stop                  Stop a running tunnel process
+ai-tunnel logs                  Show recent logs
+ai-tunnel logs -f               Follow logs (live)
+ai-tunnel help                  Show help
 ```
 
 ## v1 Compatibility

@@ -49,7 +49,7 @@ async function main() {
   let tunnelShutdown = null;
   const tunnelChannels = channels.filter((ch) => ch.tunnel?.enabled);
 
-  if (config.ssh && tunnelChannels.length > 0) {
+  if (config.ssh?.enabled && tunnelChannels.length > 0) {
     // Build a tunnel config compatible with existing tunnel.mjs
     // All inbound tunnel traffic is forwarded to the unified proxy port
     // so that it goes through the routing engine (key pool, failover, etc.)
