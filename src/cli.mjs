@@ -70,6 +70,10 @@ function removePid() {
 switch (command) {
   case "start": {
     const foreground = flags.has("--foreground") || flags.has("-f");
+    const configArgIdx = args.indexOf("--config");
+    if (configArgIdx !== -1 && args[configArgIdx + 1]) {
+      process.env.TUNNEL_CONFIG = args[configArgIdx + 1];
+    }
 
     if (foreground) {
       // Run in foreground (same as old behavior)
