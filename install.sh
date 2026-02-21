@@ -175,9 +175,11 @@ After=network.target
 Type=simple
 User=${RUN_USER}
 WorkingDirectory=${INSTALL_DIR}
-ExecStart=${NODE_PATH} ${INSTALL_DIR}/src/index.mjs
-Restart=on-failure
-RestartSec=5
+ExecStart=${NODE_PATH} ${INSTALL_DIR}/src/index.mjs --config ${INSTALL_DIR}/tunnel.config.yaml
+Restart=always
+RestartSec=2
+# Raise file descriptor limit for high concurrency
+LimitNOFILE=65535
 Environment=NODE_ENV=production
 
 [Install]

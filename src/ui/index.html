@@ -82,6 +82,20 @@
         <span id="conn-status" class="status-dot status-unknown pulse" title="Connecting..."></span>
       </div>
     </div>
+
+    <!-- Optional API token input (stored locally) -->
+    <div class="mt-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+      <div class="text-xs text-slate-600">
+        如果启用了 Web UI/API 的 Bearer Token，在这里填写（仅保存在浏览器本地）。
+      </div>
+      <div class="flex items-center gap-2">
+        <input id="token" placeholder="Bearer token (optional)"
+               class="bg-slate-900/40 border border-slate-700 rounded px-3 py-2 text-xs text-slate-200 w-72"
+               autocomplete="off" />
+        <button class="btn btn-ghost text-xs" onclick="setToken(document.getElementById('token').value)">Apply</button>
+        <button class="btn btn-ghost text-xs" onclick="setToken(''); document.getElementById('token').value='';">Clear</button>
+      </div>
+    </div>
   </div>
 
   <!-- Tabs -->
@@ -191,6 +205,19 @@ let eventSource = null;
 let currentTab = 'dashboard';
 let configData = null;
 
+// ─── Auth Token (optional) ───────────────────────────
+function initToken() {
+  if (localStorage.getItem('ai_tunnel_token') == null) {
+    localStorage.setItem('ai_tunnel_token', '');
+  }
+}
+
+function setToken(v) {
+  localStorage.setItem('ai_tunnel_token', (v || '').trim());
+  // reconnect SSE after token changes
+  connectSSE();
+}
+
 // ─── Toast ───────────────────────────────────────────
 function toast(msg, type = 'success') {
   const el = document.createElement('div');
@@ -215,9 +242,17 @@ function switchTab(name) {
 // ─── API Helpers ─────────────────────────────────────
 const API = '';
 
+function getToken() {
+  return localStorage.getItem('ai_tunnel_token') || '';
+}
+
 async function api(path, opts = {}) {
+  const token = getToken();
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+
   const res = await fetch(API + path, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...headers, ...(opts.headers || {}) },
     ...opts,
   });
   return res.json();
@@ -549,7 +584,9 @@ function clearLogs() {
 // ─── SSE Connection ──────────────────────────────────
 function connectSSE() {
   if (eventSource) eventSource.close();
-  eventSource = new EventSource('/api/logs');
+  const token = getToken();
+  const qs = token ? ('?token=' + encodeURIComponent(token)) : '';
+  eventSource = new EventSource('/api/logs' + qs);
   const dot = document.getElementById('conn-status');
 
   eventSource.onopen = () => {
@@ -608,6 +645,8 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ─── Init ────────────────────────────────────────────
+initToken();
+document.getElementById('token').value = getToken();
 refreshChannels();
 connectSSE();
 updateUptime();

@@ -23,10 +23,37 @@ function getUiHtml() {
   return uiHtml;
 }
 
+function json(res, status, data) {
+  res.writeHead(status, { "content-type": "application/json" });
+  res.end(JSON.stringify(data));
+}
+
+function unauthorized(res) {
+  res.writeHead(401, {
+    "content-type": "application/json",
+    "www-authenticate": 'Bearer realm="ai-tunnel"',
+  });
+  res.end(JSON.stringify({ error: "Unauthorized" }));
+}
+
+function checkAuth(req, url, authToken) {
+  if (!authToken) return true;
+
+  // 1) Authorization header
+  const provided = req.headers.authorization?.replace(/^Bearer\s+/i, "");
+  if (provided && provided === authToken) return true;
+
+  // 2) Query param token (for EventSource which can't set headers)
+  const qp = url.searchParams.get("token");
+  if (qp && qp === authToken) return true;
+
+  return false;
+}
+
 /**
  * Create the API + UI server.
- * If opts.token is set, all /api/* requests (except SSE) require
- * Authorization: Bearer <token> header.
+ * If opts.token is set, all /api/* requests require auth.
+ * For SSE (/api/logs), UI will use ?token=... because EventSource can't set headers.
  */
 export function createApiServer(router, opts) {
   const authToken = opts.token || process.env.AI_TUNNEL_API_TOKEN || null;
@@ -34,7 +61,7 @@ export function createApiServer(router, opts) {
 
   const server = createServer(async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
     if (req.method === "OPTIONS") {
@@ -46,11 +73,8 @@ export function createApiServer(router, opts) {
     const path = url.pathname;
 
     // Authenticate /api/* endpoints (skip the UI itself)
-    if (authToken && path.startsWith("/api/")) {
-      const provided = req.headers.authorization?.replace(/^Bearer\s+/i, "");
-      if (provided !== authToken) {
-        return json(res, 401, { error: "Unauthorized — set Authorization: Bearer <token>" });
-      }
+    if (authToken && path.startsWith("/api/") && !checkAuth(req, url, authToken)) {
+      return unauthorized(res);
     }
 
     try {
@@ -142,6 +166,9 @@ export function createApiServer(router, opts) {
 
   server.listen(opts.port, opts.host, () => {
     log("info", "UI", "Web UI available at http://%s:%d", opts.host, opts.port);
+    if (authToken) {
+      log("warn", "UI", "UI/API auth enabled (Bearer token required)" );
+    }
   });
 
   server.on("error", (e) => {
@@ -363,11 +390,6 @@ async function handleDeleteChannel(configPath, name, res) {
 }
 
 // ─── Helpers ─────────────────────────────────────────
-
-function json(res, status, data) {
-  res.writeHead(status, { "content-type": "application/json" });
-  res.end(JSON.stringify(data));
-}
 
 const MAX_API_BODY_SIZE = 1024 * 1024; // 1 MB for API requests
 
