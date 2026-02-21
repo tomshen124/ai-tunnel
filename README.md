@@ -291,7 +291,87 @@ ai-tunnel logs -f               Follow logs (live)
 ai-tunnel help                  Show help
 ```
 
-## v1 Compatibility
+## Windows: Run as a background service (NSSM)
+
+If you want AI-Tunnel to run 24/7 on Windows (auto-start on boot, auto-restart on crash), the most reliable approach is to run it as a **Windows Service**.
+
+We recommend **NSSM** (Non-Sucking Service Manager).
+
+### 1) Install prerequisites
+
+- Install Node.js (LTS)
+- Install AI-Tunnel:
+
+```powershell
+npm i -g @tomshen124/ai-tunnel
+```
+
+### 2) Choose a config path
+
+Recommended (per-user):
+
+```powershell
+$cfg = "$env:APPDATA\ai-tunnel\tunnel.config.yaml"
+```
+
+Or (system-wide):
+
+```powershell
+$cfg = "$env:ProgramData\ai-tunnel\tunnel.config.yaml"
+```
+
+### 3) Create the service (PowerShell)
+
+> Run PowerShell **as Administrator**.
+
+```powershell
+# Paths
+$nssm = "C:\\tools\\nssm\\win64\\nssm.exe"   # change to your nssm.exe path
+$node = (Get-Command node).Source
+$cli  = (Get-Command ai-tunnel).Source
+
+# Logs
+$logDir = "$env:ProgramData\\ai-tunnel\\logs"
+New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+
+# Install service
+& $nssm install ai-tunnel $cli "start" "-f" "--config" $cfg
+
+# Set working dir (optional)
+& $nssm set ai-tunnel AppDirectory (Split-Path $cli)
+
+# Redirect stdout/stderr
+& $nssm set ai-tunnel AppStdout (Join-Path $logDir "ai-tunnel.out.log")
+& $nssm set ai-tunnel AppStderr (Join-Path $logDir "ai-tunnel.err.log")
+
+# Auto-restart
+& $nssm set ai-tunnel AppRestartDelay 2000
+
+# Start now
+Start-Service ai-tunnel
+```
+
+### 4) Manage the service
+
+```powershell
+# Status
+Get-Service ai-tunnel
+
+# Start / Stop / Restart
+Start-Service ai-tunnel
+Stop-Service ai-tunnel
+Restart-Service ai-tunnel
+```
+
+### 5) Open Web UI
+
+By default:
+
+- Proxy:  http://127.0.0.1:9000
+- Web UI: http://127.0.0.1:3000
+
+> Tip: Keep Web UI bound to 127.0.0.1 unless you really need remote access. If you expose it publicly, set `server.ui.token` or put it behind a reverse proxy with auth.
+
 
 The v1 `sites` config format is still supported — it auto-converts to v2 `channels` format on startup.
 
