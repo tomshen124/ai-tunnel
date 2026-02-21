@@ -56,7 +56,7 @@ npm install
 ### Configure
 
 ```bash
-# Generate config file
+# Generate config file (in current directory)
 ai-tunnel init
 # Or
 cp tunnel.config.example.yaml tunnel.config.yaml
@@ -68,8 +68,14 @@ vim tunnel.config.yaml
 ### Run
 
 ```bash
-# Start
+# Start (foreground)
 ai-tunnel start
+
+# Override config path (recommended for services)
+ai-tunnel start --config /etc/ai-tunnel/tunnel.config.yaml
+# Or
+TUNNEL_CONFIG=/etc/ai-tunnel/tunnel.config.yaml ai-tunnel start
+
 # Or
 npm start
 # Or
@@ -80,7 +86,40 @@ Once running:
 - **Proxy entry:** `http://127.0.0.1:9000`
 - **Web UI:** `http://127.0.0.1:3000`
 
-### Usage on VPS
+## Web UI Security (Recommended)
+
+If this runs on a public VPS, you should protect the Web UI/API.
+
+Set `uiAuthToken` in config:
+
+```yaml
+uiAuthToken: "change-me"
+```
+
+Then call API with header:
+
+```bash
+curl -H "Authorization: Bearer change-me" http://127.0.0.1:3000/api/status
+```
+
+> Note: SSE (`/api/logs`) is consumed by `EventSource` which cannot set headers. The UI uses `?token=...` query param for SSE automatically.
+
+## Linux: Run as a systemd service
+
+This repo includes a simple systemd installer:
+
+```bash
+sudo bash scripts/install.sh --config /etc/ai-tunnel/tunnel.config.yaml
+```
+
+Then:
+
+```bash
+systemctl status ai-tunnel
+journalctl -u ai-tunnel -f
+```
+
+## Usage on VPS
 
 Set your AI application's API Base URL to:
 
@@ -89,6 +128,7 @@ http://localhost:9000
 ```
 
 For example, in OpenClaw config:
+
 ```yaml
 providers:
   - baseURL: http://localhost:9000/v1
@@ -106,8 +146,12 @@ server:
     enabled: true
     port: 3000            # Web UI port
 
+# Optional: protect Web UI/API (Bearer Token)
+# uiAuthToken: "change-me"
+
 # SSH (optional)
 ssh:
+  enabled: false
   host: "VPS_IP"
   port: 22
   username: "root"

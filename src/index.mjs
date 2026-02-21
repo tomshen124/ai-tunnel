@@ -32,7 +32,13 @@ async function main() {
     port: config.server.port,
     host: config.server.host,
   });
-  log("info", "Proxy", "Unified entry on %s:%d", config.server.host, config.server.port);
+  log(
+    "info",
+    "Proxy",
+    "Unified entry on %s:%d",
+    config.server.host,
+    config.server.port
+  );
 
   // ─── Start SSH tunnels (if configured) ────────────
   let tunnelShutdown = null;
@@ -52,11 +58,22 @@ async function main() {
       },
     };
 
-    log("info", "SSH", "Connecting to %s:%d...", config.ssh.host, config.ssh.port || 22);
+    log(
+      "info",
+      "SSH",
+      "Connecting to %s:%d...",
+      config.ssh.host,
+      config.ssh.port || 22
+    );
     try {
       const { shutdown } = await createTunnelManager(tunnelConfig);
       tunnelShutdown = shutdown;
-      log("info", "SSH", "Tunnel established for %d channel(s)", tunnelChannels.length);
+      log(
+        "info",
+        "SSH",
+        "Tunnel established for %d channel(s)",
+        tunnelChannels.length
+      );
     } catch (e) {
       log("error", "SSH", "Failed to connect: %s", e.message);
       log("warn", "SSH", "Proxy is running but tunnels are not available");
@@ -72,12 +89,13 @@ async function main() {
     apiServer = createApiServer(router, {
       port: config.server.ui?.port || 3000,
       host: config.server.ui?.host || "127.0.0.1",
+      uiAuthToken: config.uiAuthToken || null,
     });
   }
 
   // ─── Hot reload ───────────────────────────────────
   if (config.settings.hotReload) {
-    const unwatchFn = watchConfig(config._path, (newConfig) => {
+    watchConfig(config._path, (newConfig) => {
       log("info", "Config", "Applying new configuration...");
       setLogLevel(newConfig.settings.logLevel);
 
@@ -113,9 +131,15 @@ async function main() {
   // ─── Summary ──────────────────────────────────────
   console.log("");
   console.log("🚀 AI-Tunnel is running!");
+  console.log(`   Config: ${config._path}`);
   console.log(`   Proxy:  http://${config.server.host}:${config.server.port}`);
   if (apiServer) {
-    console.log(`   Web UI: http://${config.server.ui?.host || "127.0.0.1"}:${config.server.ui?.port || 3000}`);
+    console.log(
+      `   Web UI: http://${config.server.ui?.host || "127.0.0.1"}:${config.server.ui?.port || 3000}`
+    );
+    if (config.uiAuthToken) {
+      console.log("   UI Auth: enabled (Bearer token required)");
+    }
   }
   console.log(`   Channels: ${channels.length}`);
   if (tunnelChannels.length > 0) {

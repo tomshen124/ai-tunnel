@@ -35,7 +35,11 @@ const DEFAULT_SERVER = {
  * Supports both v1 (sites) and v2 (channels) formats.
  */
 export function loadConfig(configPath) {
-  const path = configPath || resolve(process.cwd(), DEFAULT_CONFIG_NAME);
+  const path =
+    configPath ||
+    process.env.TUNNEL_CONFIG ||
+    process.env.AI_TUNNEL_CONFIG ||
+    resolve(process.cwd(), DEFAULT_CONFIG_NAME);
 
   if (!existsSync(path)) {
     throw new Error(
@@ -68,6 +72,10 @@ export function loadConfig(configPath) {
   config.routes = config.routes || buildDefaultRoutes(config.channels);
   config.ssh = config.ssh || null;
   config.notifications = config.notifications || null;
+
+  // Optional: protect Web UI/API with a Bearer token
+  // (used by api.mjs; keep it out of server defaults)
+  config.uiAuthToken = config.uiAuthToken || null;
 
   // Stash the resolved path for hot reload
   config._path = path;

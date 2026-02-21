@@ -22,14 +22,40 @@ function getUiHtml() {
   return uiHtml;
 }
 
+function unauthorized(res) {
+  res.writeHead(401, {
+    "content-type": "application/json",
+    "www-authenticate": 'Bearer realm="ai-tunnel"',
+  });
+  res.end(JSON.stringify({ error: "Unauthorized" }));
+}
+
+function checkAuth(req, url, uiAuthToken) {
+  if (!uiAuthToken) return true;
+
+  // 1) Authorization header (recommended)
+  const h = req.headers["authorization"] || "";
+  const m = /^Bearer\s+(.+)$/i.exec(h);
+  if (m && m[1] === uiAuthToken) return true;
+
+  // 2) Query param token (needed for EventSource which can't set headers)
+  const qp = url.searchParams.get("token");
+  if (qp && qp === uiAuthToken) return true;
+
+  return false;
+}
+
 /**
  * Create the API + UI server.
  */
 export function createApiServer(router, opts) {
+  const uiAuthToken = opts.uiAuthToken || null;
+
   const server = createServer(async (req, res) => {
+    // CORS: keep permissive for local UI; if you expose publicly, put it behind a reverse proxy.
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
     if (req.method === "OPTIONS") {
       res.writeHead(204);
@@ -38,6 +64,12 @@ export function createApiServer(router, opts) {
 
     const url = new URL(req.url, `http://${req.headers.host}`);
     const path = url.pathname;
+
+    // Protect API if token configured
+    // Note: We intentionally allow UI HTML to be served without auth, but API requires token.
+    if (path.startsWith("/api/") && !checkAuth(req, url, uiAuthToken)) {
+      return unauthorized(res);
+    }
 
     try {
       // ─── API Routes ────────────────────────────
@@ -97,6 +129,9 @@ export function createApiServer(router, opts) {
 
   server.listen(opts.port, opts.host, () => {
     log("info", "UI", "Web UI available at http://%s:%d", opts.host, opts.port);
+    if (uiAuthToken) {
+      log("warn", "UI", "UI/API auth is enabled (Bearer token required)");
+    }
   });
 
   server.on("error", (e) => {
@@ -129,7 +164,9 @@ function handleListChannels(router, res) {
 
 function handleStats(router, res) {
   const channels = router.getAllChannels();
-  let totalReq = 0, totalOk = 0, totalFail = 0;
+  let totalReq = 0,
+    totalOk = 0,
+    totalFail = 0;
   const perChannel = {};
 
   for (const ch of channels) {
@@ -141,13 +178,19 @@ function handleStats(router, res) {
       requests: s.totalRequests,
       success: s.successCount,
       fail: s.failCount,
-      successRate: s.totalRequests > 0
-        ? ((s.successCount / s.totalRequests) * 100).toFixed(1) + "%"
-        : "N/A",
+      successRate:
+        s.totalRequests > 0
+          ? ((s.successCount / s.totalRequests) * 100).toFixed(1) + "%"
+          : "N/A",
     };
   }
 
-  json(res, 200, { totalRequests: totalReq, totalSuccess: totalOk, totalFail, channels: perChannel });
+  json(res, 200, {
+    totalRequests: totalReq,
+    totalSuccess: totalOk,
+    totalFail,
+    channels: perChannel,
+  });
 }
 
 function handleToggle(router, name, res) {
@@ -177,7 +220,8 @@ async function handleAddKey(router, name, req, res) {
 function handleDeleteKey(router, name, keyIndex, res) {
   const ch = router.getChannel(name);
   if (!ch) return json(res, 404, { error: `Channel '${name}' not found` });
-  if (!removeKey(ch, keyIndex)) return json(res, 400, { error: `Invalid key index: ${keyIndex}` });
+  if (!removeKey(ch, keyIndex))
+    return json(res, 400, { error: `Invalid key index: ${keyIndex}` });
   json(res, 200, channelToJSON(ch));
 }
 
@@ -197,14 +241,23 @@ function handleLogsSSE(res) {
   const unsub = subscribe("*", (_type, data) => {
     try {
       res.write(`data: ${JSON.stringify({ type: _type, ...data })}\n\n`);
-    } catch { /* client gone */ }
+    } catch {
+      /* client gone */
+    }
   });
 
   const hb = setInterval(() => {
-    try { res.write(": heartbeat\n\n"); } catch { /* ignore */ }
+    try {
+      res.write(": heartbeat\n\n");
+    } catch {
+      /* ignore */
+    }
   }, 15000);
 
-  const cleanup = () => { unsub(); clearInterval(hb); };
+  const cleanup = () => {
+    unsub();
+    clearInterval(hb);
+  };
   res.on("close", cleanup);
   res.on("error", cleanup);
 }

@@ -15,6 +15,10 @@ server:
     port: 3000
     host: "127.0.0.1"
 
+# 可选：保护 Web UI / API（Bearer Token）
+# 开启后访问需带 Header：Authorization: Bearer <token>
+# uiAuthToken: "change-me"
+
 # ═══════════════════════════════════════
 # SSH 连接（可选，不用隧道时删除此段）
 # ═══════════════════════════════════════
