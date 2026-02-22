@@ -1,6 +1,6 @@
 {
   "name": "@tomshen124/ai-tunnel",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Cross-platform API tunnel proxy — multi-channel smart routing, automatic failover, web UI",
   "type": "module",
   "main": "src/index.mjs",
